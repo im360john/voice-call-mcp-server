@@ -35,13 +35,18 @@ export class VoiceCallMcpServer {
                 try {
                     const callSid = await this.twilioCallService.makeCall(this.twilioCallbackUrl, toNumber, callContext);
 
+                    // Construct SSE URL
+                    const sseUrl = `${this.twilioCallbackUrl}/events?callSid=${callSid}`;
+
                     return {
                         content: [{
                             type: 'text',
                             text: JSON.stringify({
                                 status: 'success',
                                 message: 'Call triggered successfully',
-                                callSid: callSid
+                                callSid: callSid,
+                                sseUrl: sseUrl,
+                                info: 'Connect to the SSE URL to receive real-time call updates and transcriptions'
                             })
                         }]
                     };

@@ -33,6 +33,7 @@ sequenceDiagram
 
 - Make outbound phone calls via Twilio 📞
 - Process call audio in real-time with GPT-4o Realtime model 🎙️
+- **NEW:** Server-Sent Events (SSE) for real-time call updates and transcriptions 📡
 - Real-time language switching during calls 🌐
 - Pre-built prompts for common calling scenarios (like restaurant reservations) 🍽️
 - Automatic public URL tunneling with ngrok 🔄
@@ -133,6 +134,48 @@ Please call Delicious Restaurant at +1-123-456-7890 and make a reservation for 4
 3. Appointment scheduling:
 ```
 Please call Expert Dental NYC (+1-123-456-7899) and reschedule my Monday appointment to next Friday between 4–6pm.
+```
+
+## Server-Sent Events (SSE) Support
+
+The server now includes real-time Server-Sent Events support for monitoring call progress and receiving live transcriptions.
+
+### SSE Endpoint
+
+When you initiate a call, the response includes an `sseUrl` that you can connect to for real-time updates:
+
+```json
+{
+  "status": "success",
+  "message": "Call triggered successfully",
+  "callSid": "CA1234567890abcdef",
+  "sseUrl": "https://your-ngrok-url.ngrok.io/events?callSid=CA1234567890abcdef"
+}
+```
+
+### Event Types
+
+- **`connected`** - Confirms SSE connection established
+- **`call-status`** - Call status updates (initiated, connected, ended)
+- **`transcription`** - Real-time transcriptions from both AI and human speakers
+- **`call-ended`** - Call termination with duration info
+- **`error`** - Error events during the call
+- **`heartbeat`** - Periodic keepalive events
+
+### Example SSE Client
+
+```javascript
+const eventSource = new EventSource(sseUrl);
+
+eventSource.addEventListener('transcription', (event) => {
+  const data = JSON.parse(event.data);
+  console.log(`${data.speaker}: ${data.transcription}`);
+});
+
+eventSource.addEventListener('call-status', (event) => {
+  const data = JSON.parse(event.data);
+  console.log(`Call status: ${data.status}`);
+});
 ```
 
 ## Important Notes

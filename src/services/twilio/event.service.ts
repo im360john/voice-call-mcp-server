@@ -2,6 +2,7 @@ import { CallState } from '../../types.js';
 import { OpenAIContextService } from '../openai/context.service.js';
 import { RECORD_CALLS, SHOW_TIMING_MATH } from '../../config/constants.js';
 import { TwilioCallService } from './call.service.js';
+import { callEventEmitter } from '../sse.service.js';
 
 /**
  * Service for processing Twilio events
@@ -113,6 +114,15 @@ export class TwilioEventService {
         this.contextService.initializeCallState(this.callState, data.start.customParameters.fromNumber, data.start.customParameters.toNumber);
         this.contextService.setupConversationContext(this.callState, data.start.customParameters.callContext);
         this.callState.callSid = data.start.callSid;
+
+        // Emit call started event
+        callEventEmitter.emit('call:status', {
+            callSid: this.callState.callSid,
+            status: 'connected',
+            from: data.start.customParameters.fromNumber,
+            to: data.start.customParameters.toNumber,
+            timestamp: new Date()
+        });
     }
 
     /**

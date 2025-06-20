@@ -1,5 +1,6 @@
 import twilio from 'twilio';
 import { DYNAMIC_API_SECRET, RECORD_CALLS } from '../../config/constants.js';
+import { callEventEmitter } from '../sse.service.js';
 
 /**
  * Service for handling Twilio call operations
@@ -45,8 +46,23 @@ export class TwilioCallService {
         try {
             await this.twilioClient.calls(callSid)
                 .update({ status: 'completed' });
+            
+            // Emit call ended event
+            callEventEmitter.emit('call:ended', {
+                callSid,
+                duration: 0, // Duration would need to be tracked separately
+                timestamp: new Date()
+            });
         } catch (error) {
             console.error(`Failed to end call ${callSid}:`, error);
+            
+            // Emit error event
+            callEventEmitter.emit('call:error', {
+                callSid,
+                error: error.message || 'Failed to end call',
+                code: 'CALL_END_ERROR',
+                timestamp: new Date()
+            });
         }
     }
 
@@ -63,9 +79,27 @@ export class TwilioCallService {
                 url: `${twilioCallbackUrl}/call/outgoing?apiSecret=${DYNAMIC_API_SECRET}&callType=outgoing&callContext=${callContextEncoded}`,
             });
 
+            // Emit call initiated event
+            callEventEmitter.emit('call:status', {
+                callSid: call.sid,
+                status: 'initiated',
+                from: process.env.TWILIO_NUMBER || '',
+                to: toNumber,
+                timestamp: new Date()
+            });
+
             return call.sid;
         } catch (error) {
             console.error(`Error making call: ${error}`);
+            
+            // Emit error event
+            callEventEmitter.emit('call:error', {
+                callSid: '',
+                error: error.message || 'Failed to initiate call',
+                code: 'CALL_INIT_ERROR',
+                timestamp: new Date()
+            });
+            
             throw error;
         }
     }

@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: voice-call-mcp-server
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3004
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_NUMBER
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: NGROK_AUTHTOKEN
+        sync: false
+      - key: RECORD_CALLS
+        value: false
+      - key: SSE_CORS_ORIGIN
+        value: "*"
+      - key: SSE_PORT
+        value: 3004

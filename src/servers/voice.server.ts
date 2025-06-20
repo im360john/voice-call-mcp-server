@@ -3,9 +3,11 @@ import express, { Response } from 'express';
 import VoiceResponse from 'twilio/lib/twiml/VoiceResponse.js';
 import ExpressWs from 'express-ws';
 import { WebSocket } from 'ws';
+import cors from 'cors';
 import { CallType } from '../types.js';
 import { DYNAMIC_API_SECRET } from '../config/constants.js';
 import { CallSessionManager } from '../handlers/openai.handler.js';
+import { handleSSE } from '../services/sse.service.js';
 dotenv.config();
 
 export class VoiceServer {
@@ -24,6 +26,10 @@ export class VoiceServer {
     }
 
     private configureMiddleware(): void {
+        this.app.use(cors({
+            origin: process.env.SSE_CORS_ORIGIN || '*',
+            credentials: true,
+        }));
         this.app.use(express.json());
         this.app.use(express.urlencoded({ extended: false }));
     }
@@ -31,6 +37,7 @@ export class VoiceServer {
     private setupRoutes(): void {
         this.app.post('/call/outgoing', this.handleOutgoingCall.bind(this));
         this.app.ws('/call/connection-outgoing/:secret', this.handleOutgoingConnection.bind(this));
+        this.app.get('/events', handleSSE);
     }
 
     private async handleOutgoingCall(req: express.Request, res: Response): Promise<void> {

@@ -2,6 +2,7 @@ import { WebSocket } from 'ws';
 import { CallState } from '../../types.js';
 import { LOG_EVENT_TYPES, SHOW_TIMING_MATH } from '../../config/constants.js';
 import { checkForGoodbye } from '../../utils/call-utils.js';
+import { callEventEmitter } from '../sse.service.js';
 
 /**
  * Service for processing OpenAI events
@@ -86,6 +87,14 @@ export class OpenAIEventService {
             content: transcription
         });
 
+        // Emit transcription event for human speech
+        callEventEmitter.emit('call:transcription', {
+            callSid: this.callState.callSid,
+            transcription: transcription,
+            speaker: 'human',
+            timestamp: new Date()
+        });
+
         if (checkForGoodbye(transcription)) {
             this.onEndCall();
         }
@@ -103,6 +112,14 @@ export class OpenAIEventService {
         this.callState.conversationHistory.push({
             role: 'assistant',
             content: transcript
+        });
+
+        // Emit transcription event for AI speech
+        callEventEmitter.emit('call:transcription', {
+            callSid: this.callState.callSid,
+            transcription: transcript,
+            speaker: 'ai',
+            timestamp: new Date()
         });
     }
 
