@@ -83,6 +83,8 @@ export class OpenAIEventService {
             return;
         }
 
+        console.log(`[Transcript] Human: ${transcription}`);
+
         this.callState.conversationHistory.push({
             role: 'user',
             content: transcription
@@ -112,6 +114,8 @@ export class OpenAIEventService {
         if (!transcript) {
             return;
         }
+
+        console.log(`[Transcript] AI: ${transcript}`);
 
         this.callState.conversationHistory.push({
             role: 'assistant',

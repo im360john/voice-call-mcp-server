@@ -1,6 +1,8 @@
 import twilio from 'twilio';
 import { DYNAMIC_API_SECRET, RECORD_CALLS } from '../../config/constants.js';
 import { callEventEmitter } from '../sse.service.js';
+import { transcriptStorage } from '../transcript-storage.service.js';
+import { CallState } from '../../types.js';
 
 /**
  * Service for handling Twilio call operations
@@ -79,13 +81,23 @@ export class TwilioCallService {
                 url: `${twilioCallbackUrl}/call/outgoing?apiSecret=${DYNAMIC_API_SECRET}&callType=outgoing&callContext=${callContextEncoded}`,
             });
 
-            // Emit call initiated event
+            // Pre-create transcript for this call
+            const callState = new CallState();
+            callState.callSid = call.sid;
+            callState.fromNumber = process.env.TWILIO_NUMBER || '';
+            callState.toNumber = toNumber;
+            callState.callContext = callContext;
+            
+            const transcriptId = transcriptStorage.createTranscript(callState);
+
+            // Emit call initiated event with transcript ID
             callEventEmitter.emit('call:status', {
                 callSid: call.sid,
                 status: 'initiated',
                 from: process.env.TWILIO_NUMBER || '',
                 to: toNumber,
-                timestamp: new Date()
+                timestamp: new Date(),
+                transcriptId: transcriptId
             });
 
             return call.sid;

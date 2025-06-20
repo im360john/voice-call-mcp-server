@@ -116,8 +116,11 @@ export class TwilioEventService {
         this.contextService.setupConversationContext(this.callState, data.start.customParameters.callContext);
         this.callState.callSid = data.start.callSid;
 
-        // Create transcript for this call
-        const transcriptId = transcriptStorage.createTranscript(this.callState);
+        // Check if transcript already exists, otherwise create one
+        let transcriptId = transcriptStorage.getTranscriptIdByCallSid(this.callState.callSid);
+        if (!transcriptId) {
+            transcriptId = transcriptStorage.createTranscript(this.callState);
+        }
         this.callState.transcriptId = transcriptId;
 
         // Emit call started event
