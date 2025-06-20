@@ -3,6 +3,7 @@ import { CallState } from '../../types.js';
 import { LOG_EVENT_TYPES, SHOW_TIMING_MATH } from '../../config/constants.js';
 import { checkForGoodbye } from '../../utils/call-utils.js';
 import { callEventEmitter } from '../sse.service.js';
+import { transcriptStorage } from '../transcript-storage.service.js';
 
 /**
  * Service for processing OpenAI events
@@ -87,6 +88,9 @@ export class OpenAIEventService {
             content: transcription
         });
 
+        // Store transcription in storage service
+        transcriptStorage.addEntry(this.callState.callSid, 'user', transcription);
+
         // Emit transcription event for human speech
         callEventEmitter.emit('call:transcription', {
             callSid: this.callState.callSid,
@@ -113,6 +117,9 @@ export class OpenAIEventService {
             role: 'assistant',
             content: transcript
         });
+
+        // Store transcription in storage service
+        transcriptStorage.addEntry(this.callState.callSid, 'assistant', transcript);
 
         // Emit transcription event for AI speech
         callEventEmitter.emit('call:transcription', {

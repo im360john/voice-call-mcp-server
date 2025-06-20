@@ -10,6 +10,8 @@ import { OpenAIEventService } from '../services/openai/event.service.js';
 import { TwilioEventService } from '../services/twilio/event.service.js';
 import { SessionManagerService } from '../services/session-manager.service.js';
 import { TwilioCallService } from '../services/twilio/call.service.js';
+import { transcriptStorage } from '../services/transcript-storage.service.js';
+import { callEventEmitter } from '../services/sse.service.js';
 
 dotenv.config();
 
@@ -61,6 +63,17 @@ export class OpenAICallHandler {
 
     private endCall(): void {
         if (this.callState.callSid) {
+            // Finalize the transcript
+            transcriptStorage.finalizeTranscript(this.callState.callSid);
+            
+            // Emit call ended event with transcript ID
+            callEventEmitter.emit('call:ended', {
+                callSid: this.callState.callSid,
+                duration: 0, // Duration would need to be tracked separately
+                timestamp: new Date(),
+                transcriptId: this.callState.transcriptId
+            });
+            
             this.twilioCallService.endCall(this.callState.callSid);
         }
 

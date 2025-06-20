@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { z } from 'zod';
 import { TwilioCallService } from '../services/twilio/call.service.js';
+import { transcriptStorage } from '../services/transcript-storage.service.js';
 
 export class VoiceCallMcpServer {
     private server: McpServer;
@@ -36,6 +37,9 @@ export class VoiceCallMcpServer {
                 try {
                     const callSid = await this.twilioCallService.makeCall(this.twilioCallbackUrl, toNumber, callContext);
 
+                    // Get transcript ID for this call
+                    const transcriptId = transcriptStorage.getTranscriptIdByCallSid(callSid);
+
                     // Construct SSE URL
                     const sseUrl = `${this.twilioCallbackUrl}/events?callSid=${callSid}`;
 
@@ -46,8 +50,9 @@ export class VoiceCallMcpServer {
                                 status: 'success',
                                 message: 'Call triggered successfully',
                                 callSid: callSid,
+                                transcriptId: transcriptId,
                                 sseUrl: sseUrl,
-                                info: 'Connect to the SSE URL to receive real-time call updates and transcriptions'
+                                info: 'Connect to the SSE URL to receive real-time call updates and transcriptions. Use the transcriptId to retrieve the transcript later.'
                             })
                         }]
                     };
@@ -60,6 +65,101 @@ export class VoiceCallMcpServer {
                             text: JSON.stringify({
                                 status: 'error',
                                 message: `Failed to trigger call: ${errorMessage}`
+                            })
+                        }],
+                        isError: true
+                    };
+                }
+            }
+        );
+
+        this.server.tool(
+            'get-transcript',
+            'Retrieve a call transcript by its ID',
+            {
+                transcriptId: z.string().describe('The ID of the transcript to retrieve')
+            },
+            async ({ transcriptId }) => {
+                try {
+                    const transcript = transcriptStorage.getTranscript(transcriptId);
+                    
+                    if (!transcript) {
+                        return {
+                            content: [{
+                                type: 'text',
+                                text: JSON.stringify({
+                                    status: 'error',
+                                    message: 'Transcript not found'
+                                })
+                            }],
+                            isError: true
+                        };
+                    }
+
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'success',
+                                transcript: transcript
+                            })
+                        }]
+                    };
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'error',
+                                message: `Failed to retrieve transcript: ${errorMessage}`
+                            })
+                        }],
+                        isError: true
+                    };
+                }
+            }
+        );
+
+        this.server.tool(
+            'get-transcript-summary',
+            'Generate a summary of a call transcript',
+            {
+                transcriptId: z.string().describe('The ID of the transcript to summarize')
+            },
+            async ({ transcriptId }) => {
+                try {
+                    const summary = transcriptStorage.generateSummary(transcriptId);
+                    
+                    if (!summary) {
+                        return {
+                            content: [{
+                                type: 'text',
+                                text: JSON.stringify({
+                                    status: 'error',
+                                    message: 'Transcript not found'
+                                })
+                            }],
+                            isError: true
+                        };
+                    }
+
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: summary
+                        }]
+                    };
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'error',
+                                message: `Failed to generate summary: ${errorMessage}`
                             })
                         }],
                         isError: true

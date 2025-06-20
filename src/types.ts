@@ -13,6 +13,7 @@ export class CallState {
     // Call identification
     streamSid = '';
     callSid = '';
+    transcriptId = '';
 
     // Call type and direction
     callType: CallType = CallType.OUTBOUND;
