@@ -48,11 +48,9 @@ export class VoiceServer {
         if (this.twilioCallService) {
             const mcpSSEService = new McpSSEService(this.twilioCallService, this.callbackUrl);
             
-            // SSE endpoint for MCP - just like /events but for MCP protocol
+            // Handle both GET (SSE) and POST (JSON-RPC) on /mcp
             this.app.get('/mcp', mcpSSEService.handleMcpSSE.bind(mcpSSEService));
-            
-            // Also handle POST requests for JSON-RPC calls
-            this.app.post('/mcp', mcpSSEService.handleMcpRequest.bind(mcpSSEService));
+            this.app.post('/mcp', mcpSSEService.handleMcpMessage.bind(mcpSSEService));
         }
     }
 
