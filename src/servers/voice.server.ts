@@ -10,7 +10,7 @@ import { CallSessionManager } from '../handlers/openai.handler.js';
 import { handleSSE } from '../services/sse.service.js';
 import { VoiceCallMcpServer } from './mcp.server.js';
 import { TwilioCallService } from '../services/twilio/call.service.js';
-import { McpHttpServer } from './mcp-http.server.js';
+import { McpSSEService } from '../services/mcp-sse.service.js';
 dotenv.config();
 
 export class VoiceServer {
@@ -44,10 +44,15 @@ export class VoiceServer {
         this.app.ws('/call/connection-outgoing/:secret', this.handleOutgoingConnection.bind(this));
         this.app.get('/events', handleSSE);
 
-        // Add MCP HTTP endpoints if twilioCallService is provided
+        // Add MCP SSE endpoint if twilioCallService is provided
         if (this.twilioCallService) {
-            const mcpHttpServer = new McpHttpServer(this.twilioCallService, this.callbackUrl);
-            mcpHttpServer.setupRoutes(this.app);
+            const mcpSSEService = new McpSSEService(this.twilioCallService, this.callbackUrl);
+            
+            // SSE endpoint for MCP - just like /events but for MCP protocol
+            this.app.get('/mcp', mcpSSEService.handleMcpSSE.bind(mcpSSEService));
+            
+            // Also handle POST requests for JSON-RPC calls
+            this.app.post('/mcp', mcpSSEService.handleMcpRequest.bind(mcpSSEService));
         }
     }
 

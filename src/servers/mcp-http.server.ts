@@ -23,10 +23,12 @@ interface JsonRpcResponse {
 export class McpHttpServer {
     private twilioCallService: TwilioCallService;
     private twilioCallbackUrl: string;
+    private sseSessions: Map<string, Response>;
 
     constructor(twilioCallService: TwilioCallService, twilioCallbackUrl: string) {
         this.twilioCallService = twilioCallService;
         this.twilioCallbackUrl = twilioCallbackUrl;
+        this.sseSessions = new Map();
     }
 
     public setupRoutes(app: express.Application): void {
@@ -171,28 +173,92 @@ export class McpHttpServer {
     }
 
     private handleMcpSSE(req: Request, res: Response): void {
+        // Set SSE headers exactly like the /events endpoint
         res.writeHead(200, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
             'Connection': 'keep-alive',
             'Access-Control-Allow-Origin': '*',
+            'X-Accel-Buffering': 'no',
         });
 
-        // Send initial connection event
-        const connectionEvent = `event: open\ndata: ${JSON.stringify({
-            jsonrpc: '2.0',
-            method: 'connection.open',
-            params: { protocolVersion: '1.0' }
-        })}\n\n`;
-        res.write(connectionEvent);
+        // Create a unique session ID
+        const sessionId = uuidv4();
 
-        // Keep connection alive
-        const keepAlive = setInterval(() => {
-            res.write(':keepalive\n\n');
+        // Send initial message to establish connection
+        res.write(`data: ${JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'connection.established',
+            params: {
+                sessionId,
+                protocolVersion: '1.0',
+                serverInfo: {
+                    name: 'Voice Call MCP Server',
+                    version: '1.0.0'
+                }
+            }
+        })}\n\n`);
+
+        // Listen for incoming messages from client
+        let buffer = '';
+        
+        // Handle incoming data (if POST with SSE)
+        if (req.method === 'POST') {
+            req.on('data', (chunk) => {
+                buffer += chunk.toString();
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (line.trim()) {
+                        try {
+                            const request = JSON.parse(line);
+                            this.handleSSERequest(request, res, sessionId);
+                        } catch (error) {
+                            console.error('Error parsing SSE request:', error);
+                        }
+                    }
+                }
+            });
+        }
+
+        // Send heartbeat to keep connection alive
+        const heartbeat = setInterval(() => {
+            res.write(':heartbeat\n\n');
         }, 30000);
 
+        // Clean up on disconnect
         req.on('close', () => {
-            clearInterval(keepAlive);
+            clearInterval(heartbeat);
         });
+
+        // For GET requests, wait for client to send messages via query params or other means
+        // LibreChat might send requests as separate HTTP calls
+        this.setupSSERequestHandler(res, sessionId);
+    }
+
+    private setupSSERequestHandler(res: Response, sessionId: string): void {
+        // Store the response object for this session
+        if (!this.sseSessions) {
+            this.sseSessions = new Map();
+        }
+        this.sseSessions.set(sessionId, res);
+    }
+
+    private async handleSSERequest(request: JsonRpcRequest, res: Response, sessionId: string): Promise<void> {
+        try {
+            const response = await this.processRequest(request);
+            res.write(`data: ${JSON.stringify(response)}\n\n`);
+        } catch (error) {
+            res.write(`data: ${JSON.stringify({
+                jsonrpc: '2.0',
+                error: {
+                    code: -32603,
+                    message: 'Internal error',
+                    data: error.message
+                },
+                id: request.id
+            })}\n\n`);
+        }
     }
 }
