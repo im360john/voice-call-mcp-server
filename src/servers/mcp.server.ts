@@ -1,5 +1,6 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { z } from 'zod';
 import { TwilioCallService } from '../services/twilio/call.service.js';
 
@@ -114,6 +115,10 @@ export class VoiceCallMcpServer {
 
     public async start(): Promise<void> {
         const transport = new StdioServerTransport();
+        await this.server.connect(transport);
+    }
+
+    public async connectTransport(transport: Transport): Promise<void> {
         await this.server.connect(transport);
     }
 }

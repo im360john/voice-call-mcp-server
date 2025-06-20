@@ -10,7 +10,7 @@ import { CallSessionManager } from '../handlers/openai.handler.js';
 import { handleSSE } from '../services/sse.service.js';
 import { VoiceCallMcpServer } from './mcp.server.js';
 import { TwilioCallService } from '../services/twilio/call.service.js';
-import { McpSSEService } from '../services/mcp-sse.service.js';
+import { McpSSEServer } from './mcp-sse-server.js';
 dotenv.config();
 
 export class VoiceServer {
@@ -46,11 +46,13 @@ export class VoiceServer {
 
         // Add MCP SSE endpoint if twilioCallService is provided
         if (this.twilioCallService) {
-            const mcpSSEService = new McpSSEService(this.twilioCallService, this.callbackUrl);
+            const mcpSSEServer = new McpSSEServer(this.twilioCallService, this.callbackUrl);
             
-            // Handle both GET (SSE) and POST (JSON-RPC) on /mcp
-            this.app.get('/mcp', mcpSSEService.handleMcpSSE.bind(mcpSSEService));
-            this.app.post('/mcp', mcpSSEService.handleMcpMessage.bind(mcpSSEService));
+            // SSE endpoint
+            this.app.get('/mcp', mcpSSEServer.handleSSE.bind(mcpSSEServer));
+            
+            // Messages endpoint for POST requests
+            this.app.post('/mcp/messages', mcpSSEServer.handleMessage.bind(mcpSSEServer));
         }
     }
 
