@@ -8,6 +8,9 @@ import { CallType } from '../types.js';
 import { DYNAMIC_API_SECRET } from '../config/constants.js';
 import { CallSessionManager } from '../handlers/openai.handler.js';
 import { handleSSE } from '../services/sse.service.js';
+import { VoiceCallMcpServer } from './mcp.server.js';
+import { TwilioCallService } from '../services/twilio/call.service.js';
+import { McpHttpServer } from './mcp-http.server.js';
 dotenv.config();
 
 export class VoiceServer {
@@ -15,12 +18,14 @@ export class VoiceServer {
     private port: number;
     private sessionManager: CallSessionManager;
     private callbackUrl: string;
+    private twilioCallService?: TwilioCallService;
 
-    constructor(callbackUrl: string, sessionManager: CallSessionManager) {
+    constructor(callbackUrl: string, sessionManager: CallSessionManager, twilioCallService?: TwilioCallService) {
         this.callbackUrl = callbackUrl;
         this.port = parseInt(process.env.PORT || '3004');
         this.app = ExpressWs(express()).app;
         this.sessionManager = sessionManager;
+        this.twilioCallService = twilioCallService;
         this.configureMiddleware();
         this.setupRoutes();
     }
@@ -38,6 +43,12 @@ export class VoiceServer {
         this.app.post('/call/outgoing', this.handleOutgoingCall.bind(this));
         this.app.ws('/call/connection-outgoing/:secret', this.handleOutgoingConnection.bind(this));
         this.app.get('/events', handleSSE);
+
+        // Add MCP HTTP endpoints if twilioCallService is provided
+        if (this.twilioCallService) {
+            const mcpHttpServer = new McpHttpServer(this.twilioCallService, this.callbackUrl);
+            mcpHttpServer.setupRoutes(this.app);
+        }
     }
 
     private async handleOutgoingCall(req: express.Request, res: Response): Promise<void> {

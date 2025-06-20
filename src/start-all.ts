@@ -118,8 +118,8 @@ async function main(): Promise<void> {
         // Establish ngrok connectivity
         const twilioCallbackUrl = await setupNgrokTunnel(portNumber);
 
-        // Start the main HTTP server
-        const server = new VoiceServer(twilioCallbackUrl, sessionManager);
+        // Start the main HTTP server with MCP HTTP support
+        const server = new VoiceServer(twilioCallbackUrl, sessionManager, twilioCallService);
         server.start();
 
         const mcpServer = new VoiceCallMcpServer(twilioCallService, twilioCallbackUrl);

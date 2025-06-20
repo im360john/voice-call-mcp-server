@@ -5,8 +5,9 @@
   "scripts": {
     "start-all": "tsx src/start-all.ts",
     "start": "node dist/start-all.cjs",
+    "start:http": "tsx src/start-http.ts",
     "build": "npm-run-all clean build:app",
-    "build:app": "tsup src/start-all.ts",
+    "build:app": "tsup src/start-all.ts src/start-http.ts",
     "clean": "rimraf dist"
   },
   "dependencies": {
