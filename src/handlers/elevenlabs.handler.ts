@@ -22,8 +22,10 @@ export class ElevenLabsCallHandler {
     private readonly twilioEventProcessor: TwilioEventService;
     private readonly twilioCallService: TwilioCallService;
     private readonly callState: CallState;
+    private streamSid: string | null = null;
 
     constructor(ws: WebSocket, callType: CallType, twilioClient: twilio.Twilio) {
+        console.log('ElevenLabsCallHandler constructor called');
         this.callState = new CallState(callType);
 
         // Initialize Twilio services
@@ -33,15 +35,31 @@ export class ElevenLabsCallHandler {
         // Initialize ElevenLabs service
         const elevenLabsConfig: ElevenLabsConfig = {
             apiKey: process.env.ELEVENLABS_API_KEY || '',
-            agentId: process.env.ELEVENLABS_AGENT_ID || ''
+            agentId: process.env.ELEVENLABS_AGENT_ID || '',
+            prompt: process.env.ELEVENLABS_PROMPT,
+            firstMessage: process.env.ELEVENLABS_FIRST_MESSAGE
         };
+        console.log('ElevenLabs config:', { 
+            hasApiKey: !!elevenLabsConfig.apiKey, 
+            agentId: elevenLabsConfig.agentId,
+            hasPrompt: !!elevenLabsConfig.prompt,
+            hasFirstMessage: !!elevenLabsConfig.firstMessage
+        });
         this.elevenLabsService = new ElevenLabsWsService(elevenLabsConfig);
 
         // Initialize event processors
         this.elevenLabsEventProcessor = new ElevenLabsEventService(
             this.callState,
             () => this.endCall(),
-            (audioBase64) => this.twilioStream.sendAudioBase64(audioBase64),
+            (audioBase64) => {
+                console.log('[DEBUG] Sending audio from ElevenLabs to Twilio, length:', audioBase64?.length);
+                console.log('[DEBUG] StreamSid for audio send:', this.callState.streamSid);
+                if (this.callState.streamSid) {
+                    this.twilioStream.sendAudioBase64(audioBase64);
+                } else {
+                    console.log('[DEBUG] WARNING: No streamSid available, cannot send audio to Twilio');
+                }
+            },
             () => this.handleInterruption()
         );
 
@@ -51,12 +69,26 @@ export class ElevenLabsCallHandler {
             this.callState,
             this.twilioCallService,
             null, // No context service needed for ElevenLabs
-            (audioBase64) => this.elevenLabsService.sendAudio(audioBase64),
+            (audioBase64) => {
+                // Send audio directly if connected, like the working example
+                console.log('[DEBUG] Received audio from Twilio, length:', audioBase64?.length);
+                console.log('[DEBUG] StreamSid:', this.callState.streamSid);
+                console.log('[DEBUG] ElevenLabs connected:', this.elevenLabsService.isConnected());
+                
+                if (this.elevenLabsService.isConnected() && this.callState.streamSid) {
+                    this.elevenLabsService.sendAudio(audioBase64);
+                } else {
+                    console.log('[DEBUG] Cannot send audio - ElevenLabs connected:', this.elevenLabsService.isConnected(), 'StreamSid:', this.callState.streamSid);
+                }
+            },
         );
 
         this.setupEventHandlers();
-        // Delay ElevenLabs initialization to ensure Twilio connection is ready
-        setTimeout(() => this.initializeElevenLabs(), 100);
+        // Initialize ElevenLabs immediately like the working example
+        console.log('[DEBUG] Starting ElevenLabs initialization...');
+        this.initializeElevenLabs().catch(error => {
+            console.error('Error during ElevenLabs initialization:', error);
+        });
     }
 
     private endCall(): void {
@@ -85,20 +117,25 @@ export class ElevenLabsCallHandler {
         this.elevenLabsService.close();
     }
 
-    private initializeElevenLabs(): void {
-        this.elevenLabsService.initialize(
-            (data) => this.elevenLabsEventProcessor.processMessage(data),
-            () => {
-                console.log('ElevenLabs WebSocket opened');
-                // ElevenLabs doesn't need explicit session initialization
-                // The agent configuration is handled by the agent_id
-            },
-            () => {
-                console.log('ElevenLabs WebSocket closed');
-                this.twilioStream.close();
-            },
-            (error) => console.error('Error in the ElevenLabs WebSocket:', error)
-        );
+    private async initializeElevenLabs(): Promise<void> {
+        console.log('Initializing ElevenLabs WebSocket connection...');
+        try {
+            await this.elevenLabsService.initialize(
+                (data) => this.elevenLabsEventProcessor.processMessage(data),
+                () => {
+                    console.log('[DEBUG] ElevenLabs WebSocket opened and ready');
+                    console.log('[DEBUG] Current streamSid:', this.callState.streamSid);
+                    console.log('[DEBUG] Current callSid:', this.callState.callSid);
+                },
+                () => {
+                    console.log('ElevenLabs WebSocket closed');
+                    this.twilioStream.close();
+                },
+                (error) => console.error('Error in the ElevenLabs WebSocket:', error)
+            );
+        } catch (error) {
+            console.error('Failed to initialize ElevenLabs:', error);
+        }
     }
 
     private handleInterruption(): void {
@@ -115,20 +152,15 @@ export class ElevenLabsCallHandler {
                         ? JSON.parse(rawMessage.toString()) 
                         : rawMessage;
                     
-                    // For ElevenLabs, we need to handle Twilio events differently
-                    // since we don't have the complex OpenAI context
-                    if (message.event === 'media') {
-                        // Forward audio directly to ElevenLabs
-                        if (message.media?.payload) {
-                            this.elevenLabsService.sendAudio(message.media.payload);
-                        }
-                    } else if (message.event === 'start') {
-                        // Let the regular processor handle start event
-                        // It now handles null context service properly
-                        await this.twilioEventProcessor.processMessage(rawMessage);
-                    } else {
-                        // Let the regular processor handle other events
-                        await this.twilioEventProcessor.processMessage(rawMessage);
+                    // Process all Twilio events through the event processor
+                    await this.twilioEventProcessor.processMessage(rawMessage);
+                    
+                    // Store streamSid when we get the start event
+                    if (message.event === 'start' && message.start?.streamSid) {
+                        this.streamSid = message.start.streamSid;
+                        this.callState.streamSid = this.streamSid;
+                        console.log('[DEBUG] Twilio stream started - StreamSid:', this.streamSid);
+                        console.log('[DEBUG] CallSid:', message.start.callSid);
                     }
                 } catch (error) {
                     console.error('Error handling Twilio message in ElevenLabs handler:', error);

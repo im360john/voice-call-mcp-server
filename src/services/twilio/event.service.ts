@@ -62,7 +62,7 @@ export class TwilioEventService {
             this.handleMarkEvent();
             break;
         default:
-            console.error('Received non-media event:', data.event);
+            console.log('Received non-media event:', data.event);
             break;
         }
     }
@@ -78,6 +78,7 @@ export class TwilioEventService {
         }
 
         await this.handleFirstMediaEventIfNeeded();
+        console.log('Forwarding audio to provider, payload length:', data.media.payload?.length);
         this.onForwardAudioToOpenAI(data.media.payload);
     }
 

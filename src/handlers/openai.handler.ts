@@ -12,7 +12,7 @@ import { SessionManagerService } from '../services/session-manager.service.js';
 import { TwilioCallService } from '../services/twilio/call.service.js';
 import { transcriptStorage } from '../services/transcript-storage.service.js';
 import { callEventEmitter } from '../services/sse.service.js';
-import { ElevenLabsCallHandler } from './elevenlabs.handler.js';
+import { SimpleElevenLabsHandler } from './elevenlabs-simple.handler.js';
 
 dotenv.config();
 
@@ -146,8 +146,8 @@ export class CallSessionManager {
      */
     public createSession(ws: WebSocket, callType: CallType, provider: AIProvider = AIProvider.OPENAI): void {
         if (provider === AIProvider.ELEVENLABS) {
-            // Use ElevenLabs handler
-            new ElevenLabsCallHandler(ws, callType, this.twilioClient);
+            // Use simplified ElevenLabs handler based on working example
+            new SimpleElevenLabsHandler(ws, callType, this.twilioClient);
         } else {
             // Use OpenAI handler (default)
             this.sessionManager.createSession(ws, callType);

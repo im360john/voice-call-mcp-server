@@ -11,6 +11,8 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
+    "@fastify/formbody": "^8.0.2",
+    "@fastify/websocket": "^11.1.0",
     "@modelcontextprotocol/sdk": "1.8.0",
     "@ngrok/ngrok": "^1.4.1",
     "axios": "^1.6.8",
@@ -21,6 +23,7 @@
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "express": "^4.18.3",
     "express-ws": "^5.0.2",
+    "fastify": "^5.4.0",
     "form-data": "^4.0.0",
     "google-protobuf": "^3.21.4",
     "httpdispatcher": "^2.2.0",

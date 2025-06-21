@@ -80,6 +80,8 @@ export enum AIProvider {
 export interface ElevenLabsConfig {
     apiKey: string;
     agentId: string;
+    prompt?: string;
+    firstMessage?: string;
 }
 
 /**
@@ -87,6 +89,18 @@ export interface ElevenLabsConfig {
  */
 export interface ElevenLabsMessage {
     type: string;
+    ping_event?: {
+        event_id: string;
+    };
+    audio?: {
+        chunk?: string;
+    } | string;
+    audio_event?: {
+        audio_base_64: string;
+        track_id?: string;
+        sample_rate?: number;
+        channels?: number;
+    };
     [key: string]: any;
 }
 

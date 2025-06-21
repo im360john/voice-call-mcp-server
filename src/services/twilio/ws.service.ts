@@ -51,6 +51,7 @@ export class TwilioWsService {
      */
     public sendAudio(payload: string): void {
         if (!this.callState.streamSid) {
+            console.log('[DEBUG] ERROR: Cannot send audio - no streamSid available');
             return;
         }
 
@@ -59,6 +60,13 @@ export class TwilioWsService {
             streamSid: this.callState.streamSid,
             media: { payload }
         };
+        
+        console.log('[DEBUG] Sending audio to Twilio:', {
+            streamSid: this.callState.streamSid,
+            payloadLength: payload.length,
+            webSocketState: this.webSocket.readyState === WebSocket.OPEN ? 'OPEN' : 'NOT_OPEN'
+        });
+        
         this.webSocket.send(JSON.stringify(audioDelta));
     }
 
@@ -67,6 +75,8 @@ export class TwilioWsService {
      * @param audioBase64 The base64 encoded audio data
      */
     public sendAudioBase64(audioBase64: string): void {
+        console.log('[DEBUG] TwilioWsService.sendAudioBase64 called, length:', audioBase64?.length);
+        console.log('[DEBUG] StreamSid available:', !!this.callState.streamSid);
         this.sendAudio(audioBase64);
     }
 
