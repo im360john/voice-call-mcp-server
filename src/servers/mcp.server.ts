@@ -7,6 +7,8 @@ import { TwilioSMSService } from '../services/twilio/sms.service.js';
 import { transcriptStorage } from '../services/transcript-storage.service.js';
 import { smsStorage } from '../services/sms-storage.service.js';
 import { AIProvider } from '../types.js';
+import { BatchOperationService } from '../services/batch-operation.service.js';
+import { BatchCallRequest, BatchSMSRequest, BatchTarget } from '../types/batch.types.js';
 
 export class VoiceCallMcpServer {
     private server: McpServer;
@@ -295,6 +297,228 @@ export class VoiceCallMcpServer {
                             text: JSON.stringify({
                                 status: 'error',
                                 message: `Failed to list conversations: ${errorMessage}`
+                            })
+                        }],
+                        isError: true
+                    };
+                }
+            }
+        );
+
+        // Batch call tool
+        this.server.tool(
+            'trigger-batch-calls',
+            'Trigger multiple outbound phone calls via Twilio',
+            {
+                provider: z.enum(['openai', 'elevenlabs']).describe('AI provider to use for the calls'),
+                targets: z.array(z.object({
+                    phoneNumber: z.string().describe('Phone number to call'),
+                    prompt: z.string().optional().describe('Custom prompt for this specific call'),
+                    context: z.string().optional().describe('Custom context for this specific call'),
+                    metadata: z.record(z.any()).optional().describe('Additional metadata')
+                })).describe('List of targets to call'),
+                defaultPrompt: z.string().optional().describe('Default prompt to use if target has no specific prompt'),
+                defaultContext: z.string().optional().describe('Default context to use if target has no specific context'),
+                maxConcurrent: z.number().optional().describe('Maximum concurrent calls (default: 1)')
+            },
+            async ({ provider, targets, defaultPrompt, defaultContext, maxConcurrent }) => {
+                try {
+                    const aiProvider = provider === 'elevenlabs' ? AIProvider.ELEVENLABS : AIProvider.OPENAI;
+                    
+                    const request: BatchCallRequest = {
+                        provider: aiProvider,
+                        targets: targets as BatchTarget[],
+                        defaultPrompt,
+                        defaultContext,
+                        maxConcurrent
+                    };
+                    
+                    const batchId = await this.twilioCallService.makeBatchCalls(this.twilioCallbackUrl, request);
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'success',
+                                message: 'Batch calls initiated successfully',
+                                batchId: batchId,
+                                totalTargets: targets.length,
+                                sseUrl: `${this.twilioCallbackUrl}/batch/calls/${batchId}/events`,
+                                statusUrl: `${this.twilioCallbackUrl}/batch/calls/${batchId}`,
+                                transcriptsUrl: `${this.twilioCallbackUrl}/batch/calls/${batchId}/transcripts`,
+                                info: 'Use the batchId to track progress and retrieve transcripts'
+                            })
+                        }]
+                    };
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'error',
+                                message: `Failed to initiate batch calls: ${errorMessage}`
+                            })
+                        }],
+                        isError: true
+                    };
+                }
+            }
+        );
+
+        // Batch SMS tool
+        this.server.tool(
+            'trigger-batch-sms',
+            'Send multiple SMS messages via Twilio',
+            {
+                targets: z.array(z.object({
+                    phoneNumber: z.string().describe('Phone number to send SMS to'),
+                    message: z.string().describe('SMS message content'),
+                    metadata: z.record(z.any()).optional().describe('Additional metadata')
+                })).describe('List of SMS messages to send'),
+                maxConcurrent: z.number().optional().describe('Maximum concurrent messages (default: 1)')
+            },
+            async ({ targets, maxConcurrent }) => {
+                try {
+                    const request: BatchSMSRequest = {
+                        targets: targets,
+                        maxConcurrent
+                    };
+                    
+                    const batchId = await this.twilioSMSService.sendBatchSMS(request);
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'success',
+                                message: 'Batch SMS initiated successfully',
+                                batchId: batchId,
+                                totalTargets: targets.length,
+                                statusUrl: `${this.twilioCallbackUrl}/batch/sms/${batchId}`,
+                                conversationsUrl: `${this.twilioCallbackUrl}/batch/sms/${batchId}/conversations`,
+                                info: 'Use the batchId to track progress and retrieve conversations'
+                            })
+                        }]
+                    };
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'error',
+                                message: `Failed to send batch SMS: ${errorMessage}`
+                            })
+                        }],
+                        isError: true
+                    };
+                }
+            }
+        );
+
+        // Get batch status tool
+        this.server.tool(
+            'get-batch-status',
+            'Get the status of a batch operation',
+            {
+                batchId: z.string().describe('The batch operation ID')
+            },
+            async ({ batchId }) => {
+                try {
+                    const batchService = BatchOperationService.getInstance();
+                    const operation = batchService.getBatchOperation(batchId);
+                    
+                    if (!operation) {
+                        return {
+                            content: [{
+                                type: 'text',
+                                text: JSON.stringify({
+                                    status: 'error',
+                                    message: 'Batch operation not found'
+                                })
+                            }],
+                            isError: true
+                        };
+                    }
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'success',
+                                operation: {
+                                    batchId: operation.batchId,
+                                    type: operation.type,
+                                    status: operation.status,
+                                    totalTargets: operation.totalTargets,
+                                    completedTargets: operation.completedTargets,
+                                    failedTargets: operation.failedTargets,
+                                    createdAt: operation.createdAt,
+                                    updatedAt: operation.updatedAt,
+                                    progress: `${operation.completedTargets + operation.failedTargets}/${operation.totalTargets}`
+                                }
+                            })
+                        }]
+                    };
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'error',
+                                message: `Failed to get batch status: ${errorMessage}`
+                            })
+                        }],
+                        isError: true
+                    };
+                }
+            }
+        );
+
+        // Get batch transcripts tool
+        this.server.tool(
+            'get-batch-transcripts',
+            'Get all transcripts from a batch call operation',
+            {
+                batchId: z.string().describe('The batch operation ID')
+            },
+            async ({ batchId }) => {
+                try {
+                    const transcripts = transcriptStorage.getTranscriptsByBatchId(batchId);
+                    const summary = transcriptStorage.getBatchTranscriptSummary(batchId);
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'success',
+                                batchId: batchId,
+                                summary: summary,
+                                transcriptCount: transcripts.length,
+                                transcripts: transcripts.map(t => ({
+                                    transcriptId: t.transcriptId,
+                                    phoneNumber: t.to,
+                                    duration: t.duration,
+                                    messageCount: t.entries.length,
+                                    entries: t.entries
+                                }))
+                            })
+                        }]
+                    };
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'error',
+                                message: `Failed to get batch transcripts: ${errorMessage}`
                             })
                         }],
                         isError: true

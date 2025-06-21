@@ -16,20 +16,24 @@ export interface StoredTranscript {
   endTime?: Date;
   duration?: number;
   entries: TranscriptEntry[];
+  batchId?: string;
   metadata?: {
     callContext?: string;
     recordingUrl?: string;
+    customPrompt?: string;
+    customContext?: string;
   };
 }
 
 export class TranscriptStorageService {
   private transcripts: Map<string, StoredTranscript> = new Map();
   private callToTranscriptMap: Map<string, string> = new Map();
+  private batchToTranscriptMap: Map<string, Set<string>> = new Map();
 
   /**
    * Create a new transcript for a call
    */
-  public createTranscript(callState: CallState): string {
+  public createTranscript(callState: CallState, batchId?: string): string {
     const transcriptId = uuidv4();
     
     const transcript: StoredTranscript = {
@@ -39,13 +43,24 @@ export class TranscriptStorageService {
       to: callState.toNumber,
       startTime: new Date(),
       entries: [],
+      batchId,
       metadata: {
-        callContext: callState.callContext
+        callContext: callState.callContext,
+        customPrompt: callState.customPrompt,
+        customContext: callState.customContext
       }
     };
 
     this.transcripts.set(transcriptId, transcript);
     this.callToTranscriptMap.set(callState.callSid, transcriptId);
+    
+    // Track batch association
+    if (batchId) {
+      if (!this.batchToTranscriptMap.has(batchId)) {
+        this.batchToTranscriptMap.set(batchId, new Set());
+      }
+      this.batchToTranscriptMap.get(batchId)!.add(transcriptId);
+    }
     
     return transcriptId;
   }
@@ -142,6 +157,63 @@ ${conversationText}`;
    */
   public getAllTranscriptIds(): string[] {
     return Array.from(this.transcripts.keys());
+  }
+
+  /**
+   * Get transcripts by batch ID
+   */
+  public getTranscriptsByBatchId(batchId: string): StoredTranscript[] {
+    const transcriptIds = this.batchToTranscriptMap.get(batchId);
+    if (!transcriptIds) return [];
+
+    const transcripts: StoredTranscript[] = [];
+    for (const id of transcriptIds) {
+      const transcript = this.transcripts.get(id);
+      if (transcript) {
+        transcripts.push(transcript);
+      }
+    }
+
+    return transcripts;
+  }
+
+  /**
+   * Get batch transcript summary
+   */
+  public getBatchTranscriptSummary(batchId: string): {
+    totalCalls: number;
+    completedCalls: number;
+    averageDuration: number;
+    transcripts: Array<{
+      transcriptId: string;
+      phoneNumber: string;
+      duration: number;
+      messageCount: number;
+      summary?: string;
+    }>;
+  } {
+    const transcripts = this.getTranscriptsByBatchId(batchId);
+    const completedTranscripts = transcripts.filter(t => t.endTime !== undefined);
+    
+    const totalDuration = completedTranscripts.reduce((sum, t) => sum + (t.duration || 0), 0);
+    const averageDuration = completedTranscripts.length > 0 
+      ? totalDuration / completedTranscripts.length 
+      : 0;
+
+    return {
+      totalCalls: transcripts.length,
+      completedCalls: completedTranscripts.length,
+      averageDuration,
+      transcripts: transcripts.map(t => ({
+        transcriptId: t.transcriptId,
+        phoneNumber: t.to,
+        duration: t.duration || 0,
+        messageCount: t.entries.length,
+        summary: t.entries.length > 0 
+          ? `${t.entries.length} messages exchanged` 
+          : 'No messages'
+      }))
+    };
   }
 }
 

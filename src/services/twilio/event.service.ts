@@ -118,6 +118,15 @@ export class TwilioEventService {
         const fromNumber = data.start.customParameters.fromNumber;
         const toNumber = data.start.customParameters.toNumber;
         const callContext = data.start.customParameters.callContext || '';
+        
+        // Set batch parameters if present
+        const batchId = data.start.customParameters.batchId;
+        const customPrompt = data.start.customParameters.customPrompt;
+        const customContext = data.start.customParameters.customContext;
+        
+        if (batchId) this.callState.batchId = batchId;
+        if (customPrompt) this.callState.customPrompt = decodeURIComponent(customPrompt);
+        if (customContext) this.callState.customContext = decodeURIComponent(customContext);
 
         // For OpenAI, use context service. For others, set directly
         if (this.contextService) {
@@ -133,7 +142,7 @@ export class TwilioEventService {
         // Check if transcript already exists, otherwise create one
         let transcriptId = transcriptStorage.getTranscriptIdByCallSid(this.callState.callSid);
         if (!transcriptId) {
-            transcriptId = transcriptStorage.createTranscript(this.callState);
+            transcriptId = transcriptStorage.createTranscript(this.callState, batchId);
         }
         this.callState.transcriptId = transcriptId;
 
@@ -144,7 +153,8 @@ export class TwilioEventService {
             from: fromNumber,
             to: toNumber,
             timestamp: new Date(),
-            transcriptId: transcriptId
+            transcriptId: transcriptId,
+            batchId: batchId
         });
     }
 

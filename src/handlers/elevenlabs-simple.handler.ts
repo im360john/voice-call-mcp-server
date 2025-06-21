@@ -4,6 +4,7 @@ import axios from 'axios';
 import { CallState, CallType } from '../types.js';
 import { callEventEmitter } from '../services/sse.service.js';
 import { transcriptStorage } from '../services/transcript-storage.service.js';
+import { BatchOperationService } from '../services/batch-operation.service.js';
 
 /**
  * Simplified ElevenLabs handler based on the working example
@@ -17,11 +18,13 @@ export class SimpleElevenLabsHandler {
     private callSid: string | null = null;
     private customParameters: any = null;
     private callState: CallState;
+    private batchService: BatchOperationService;
 
     constructor(ws: WebSocket, callType: CallType, private twilioClient: twilio.Twilio) {
         console.log('[SimpleElevenLabs] Handler created');
         this.twilioWs = ws;
         this.callState = new CallState(callType);
+        this.batchService = BatchOperationService.getInstance();
         
         // Set up handlers immediately
         this.setupTwilioHandlers();
@@ -71,8 +74,17 @@ export class SimpleElevenLabsHandler {
                 };
 
                 // Only send overrides if explicitly provided via custom parameters or env variables
-                const customPrompt = this.customParameters?.prompt || process.env.ELEVENLABS_PROMPT;
+                // Check for batch custom prompt first, then fall back to other sources
+                const customPrompt = this.customParameters?.customPrompt 
+                    ? decodeURIComponent(this.customParameters.customPrompt)
+                    : (this.customParameters?.prompt || process.env.ELEVENLABS_PROMPT);
+                    
                 const customFirstMessage = this.customParameters?.first_message || process.env.ELEVENLABS_FIRST_MESSAGE;
+                
+                // Use custom context if provided
+                const customContext = this.customParameters?.customContext 
+                    ? decodeURIComponent(this.customParameters.customContext)
+                    : null;
                 
                 if (customPrompt || customFirstMessage) {
                     initialConfig.conversation_config_override = {
@@ -80,8 +92,12 @@ export class SimpleElevenLabsHandler {
                     };
                     
                     if (customPrompt) {
+                        let finalPrompt = customPrompt;
+                        if (customContext) {
+                            finalPrompt = `${customPrompt}\n\nContext: ${customContext}`;
+                        }
                         initialConfig.conversation_config_override.agent.prompt = {
-                            prompt: customPrompt
+                            prompt: finalPrompt
                         };
                     }
                     
@@ -245,12 +261,18 @@ export class SimpleElevenLabsHandler {
                         this.callState.fromNumber = msg.start.customParameters?.fromNumber || '';
                         this.callState.toNumber = msg.start.customParameters?.toNumber || '';
                         
+                        // Set batch parameters if present
+                        const batchId = msg.start.customParameters?.batchId;
+                        if (batchId) {
+                            this.callState.batchId = batchId;
+                        }
+                        
                         // Check if transcript already exists (created by makeCall)
                         let transcriptId = transcriptStorage.getTranscriptIdByCallSid(this.callSid || '');
                         
                         if (!transcriptId) {
                             // Only create if it doesn't exist (e.g., for inbound calls)
-                            transcriptId = transcriptStorage.createTranscript(this.callState);
+                            transcriptId = transcriptStorage.createTranscript(this.callState, batchId);
                             console.log(`[SimpleElevenLabs] Created new transcript with ID: ${transcriptId}`);
                         } else {
                             console.log(`[SimpleElevenLabs] Using existing transcript ID: ${transcriptId}`);
@@ -267,7 +289,8 @@ export class SimpleElevenLabsHandler {
                             from: this.callState.fromNumber,
                             to: this.callState.toNumber,
                             timestamp: new Date(),
-                            transcriptId: transcriptId
+                            transcriptId: transcriptId,
+                            batchId: batchId
                         });
                         break;
 
@@ -294,12 +317,22 @@ export class SimpleElevenLabsHandler {
                         if (this.callSid) {
                             transcriptStorage.finalizeTranscript(this.callSid);
                             
+                            // Update batch operation if part of batch
+                            if (this.callState.batchId && this.callState.toNumber) {
+                                this.batchService.completeBatchTarget(
+                                    this.callState.batchId,
+                                    this.callState.toNumber,
+                                    this.callState.transcriptId
+                                );
+                            }
+                            
                             // Emit call ended event
                             callEventEmitter.emit('call:ended', {
                                 callSid: this.callSid,
                                 duration: 0,
                                 timestamp: new Date(),
-                                transcriptId: this.callState.transcriptId
+                                transcriptId: this.callState.transcriptId,
+                                batchId: this.callState.batchId
                             });
                         }
                         break;

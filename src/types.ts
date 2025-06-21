@@ -27,6 +27,11 @@ export class CallState {
     initialMessage = '';
     conversationHistory: ConversationMessage[] = [];
 
+    // Batch operation support
+    batchId?: string;
+    customPrompt?: string;
+    customContext?: string;
+
     // Speech state
     speaking = false;
 

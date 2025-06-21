@@ -13,6 +13,7 @@ import { TwilioCallService } from '../services/twilio/call.service.js';
 import { transcriptStorage } from '../services/transcript-storage.service.js';
 import { callEventEmitter } from '../services/sse.service.js';
 import { SimpleElevenLabsHandler } from './elevenlabs-simple.handler.js';
+import { BatchOperationService } from '../services/batch-operation.service.js';
 
 dotenv.config();
 
@@ -26,9 +27,11 @@ export class OpenAICallHandler {
     private readonly twilioEventProcessor: TwilioEventService;
     private readonly twilioCallService: TwilioCallService;
     private readonly callState: CallState;
+    private readonly batchService: BatchOperationService;
 
     constructor(ws: WebSocket, callType: CallType, twilioClient: twilio.Twilio, contextService: OpenAIContextService) {
         this.callState = new CallState(callType);
+        this.batchService = BatchOperationService.getInstance();
 
         // Initialize Twilio services
         this.twilioStream = new TwilioWsService(ws, this.callState);
@@ -67,12 +70,22 @@ export class OpenAICallHandler {
             // Finalize the transcript
             transcriptStorage.finalizeTranscript(this.callState.callSid);
             
+            // Update batch operation if part of batch
+            if (this.callState.batchId && this.callState.toNumber) {
+                this.batchService.completeBatchTarget(
+                    this.callState.batchId,
+                    this.callState.toNumber,
+                    this.callState.transcriptId
+                );
+            }
+            
             // Emit call ended event with transcript ID
             callEventEmitter.emit('call:ended', {
                 callSid: this.callState.callSid,
                 duration: 0, // Duration would need to be tracked separately
                 timestamp: new Date(),
-                transcriptId: this.callState.transcriptId
+                transcriptId: this.callState.transcriptId,
+                batchId: this.callState.batchId
             });
             
             this.twilioCallService.endCall(this.callState.callSid);

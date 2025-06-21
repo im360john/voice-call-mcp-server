@@ -13,6 +13,9 @@ import { TwilioCallService } from '../services/twilio/call.service.js';
 import { TwilioSMSService } from '../services/twilio/sms.service.js';
 import { McpSSEServer } from './mcp-sse-server.js';
 import { smsStorage } from '../services/sms-storage.service.js';
+import { BatchOperationService } from '../services/batch-operation.service.js';
+import { transcriptStorage } from '../services/transcript-storage.service.js';
+import { BatchCallRequest, BatchSMSRequest } from '../types/batch.types.js';
 dotenv.config();
 
 export class VoiceServer {
@@ -72,6 +75,20 @@ export class VoiceServer {
             // Messages endpoint for POST requests
             this.app.post('/mcp/messages', mcpSSEServer.handleMessage.bind(mcpSSEServer));
         }
+
+        // Batch operation routes
+        if (this.twilioCallService) {
+            this.app.post('/batch/calls', this.handleBatchCalls.bind(this));
+            this.app.get('/batch/calls/:batchId', this.handleGetBatchStatus.bind(this));
+            this.app.get('/batch/calls/:batchId/transcripts', this.handleGetBatchTranscripts.bind(this));
+            this.app.get('/batch/calls/:batchId/events', this.handleBatchSSE.bind(this));
+        }
+
+        if (this.twilioSMSService) {
+            this.app.post('/batch/sms', this.handleBatchSMS.bind(this));
+            this.app.get('/batch/sms/:batchId', this.handleGetBatchStatus.bind(this));
+            this.app.get('/batch/sms/:batchId/conversations', this.handleGetBatchConversations.bind(this));
+        }
     }
 
     private async handleOutgoingCall(req: express.Request, res: Response): Promise<void> {
@@ -85,6 +102,9 @@ export class VoiceServer {
         const fromNumber = req.body.From;
         const toNumber = req.body.To;
         const callContext = req.query.callContext?.toString();
+        const batchId = req.query.batchId?.toString();
+        const customPrompt = req.query.customPrompt?.toString();
+        const customContext = req.query.customContext?.toString();
 
         const twiml = new VoiceResponse();
         const connect = twiml.connect();
@@ -96,6 +116,9 @@ export class VoiceServer {
         stream.parameter({ name: 'fromNumber', value: fromNumber });
         stream.parameter({ name: 'toNumber', value: toNumber });
         stream.parameter({ name: 'callContext', value: callContext });
+        if (batchId) stream.parameter({ name: 'batchId', value: batchId });
+        if (customPrompt) stream.parameter({ name: 'customPrompt', value: customPrompt });
+        if (customContext) stream.parameter({ name: 'customContext', value: customContext });
 
         res.writeHead(200, { 'Content-Type': 'text/xml' });
         res.end(twiml.toString());
@@ -117,6 +140,10 @@ export class VoiceServer {
             toNumber = req.body.To,
             callContext = req.body.callContext || '',
         } = req.body;
+        
+        const batchId = req.query.batchId?.toString();
+        const customPrompt = req.query.customPrompt?.toString();
+        const customContext = req.query.customContext?.toString();
 
         const twiml = new VoiceResponse();
         const connect = twiml.connect();
@@ -128,6 +155,9 @@ export class VoiceServer {
         stream.parameter({ name: 'fromNumber', value: fromNumber });
         stream.parameter({ name: 'toNumber', value: toNumber });
         stream.parameter({ name: 'callContext', value: callContext });
+        if (batchId) stream.parameter({ name: 'batchId', value: batchId });
+        if (customPrompt) stream.parameter({ name: 'customPrompt', value: customPrompt });
+        if (customContext) stream.parameter({ name: 'customContext', value: customContext });
 
         res.writeHead(200, { 'Content-Type': 'text/xml' });
         res.end(twiml.toString());
@@ -248,5 +278,182 @@ export class VoiceServer {
 
     public start(): void {
         this.app.listen(this.port);
+    }
+
+    // Batch operation handlers
+    private async handleBatchCalls(req: Request, res: Response): Promise<void> {
+        try {
+            if (!this.twilioCallService) {
+                res.status(500).json({ error: 'Call service not configured' });
+                return;
+            }
+
+            const request: BatchCallRequest = req.body;
+            
+            // Validate request
+            if (!request.targets || request.targets.length === 0) {
+                res.status(400).json({ error: 'No targets provided' });
+                return;
+            }
+
+            if (!request.provider) {
+                res.status(400).json({ error: 'Provider is required' });
+                return;
+            }
+
+            const batchId = await this.twilioCallService.makeBatchCalls(this.callbackUrl, request);
+            
+            res.json({
+                success: true,
+                batchId,
+                totalTargets: request.targets.length
+            });
+        } catch (error) {
+            console.error('Error initiating batch calls:', error);
+            res.status(500).json({ error: 'Failed to initiate batch calls' });
+        }
+    }
+
+    private async handleBatchSMS(req: Request, res: Response): Promise<void> {
+        try {
+            if (!this.twilioSMSService) {
+                res.status(500).json({ error: 'SMS service not configured' });
+                return;
+            }
+
+            const request: BatchSMSRequest = req.body;
+            
+            // Validate request
+            if (!request.targets || request.targets.length === 0) {
+                res.status(400).json({ error: 'No targets provided' });
+                return;
+            }
+
+            const batchId = await this.twilioSMSService.sendBatchSMS(request);
+            
+            res.json({
+                success: true,
+                batchId,
+                totalTargets: request.targets.length
+            });
+        } catch (error) {
+            console.error('Error sending batch SMS:', error);
+            res.status(500).json({ error: 'Failed to send batch SMS' });
+        }
+    }
+
+    private handleGetBatchStatus(req: Request, res: Response): void {
+        const { batchId } = req.params;
+        const batchService = BatchOperationService.getInstance();
+        
+        const operation = batchService.getBatchOperation(batchId);
+        if (!operation) {
+            res.status(404).json({ error: 'Batch operation not found' });
+            return;
+        }
+
+        res.json({
+            batchId: operation.batchId,
+            type: operation.type,
+            status: operation.status,
+            totalTargets: operation.totalTargets,
+            completedTargets: operation.completedTargets,
+            failedTargets: operation.failedTargets,
+            createdAt: operation.createdAt,
+            updatedAt: operation.updatedAt,
+            results: operation.results
+        });
+    }
+
+    private handleGetBatchTranscripts(req: Request, res: Response): void {
+        const { batchId } = req.params;
+        
+        const transcripts = transcriptStorage.getTranscriptsByBatchId(batchId);
+        const summary = transcriptStorage.getBatchTranscriptSummary(batchId);
+        
+        res.json({
+            batchId,
+            summary,
+            transcripts: transcripts.map(t => ({
+                transcriptId: t.transcriptId,
+                callSid: t.callSid,
+                from: t.from,
+                to: t.to,
+                startTime: t.startTime,
+                endTime: t.endTime,
+                duration: t.duration,
+                entryCount: t.entries.length,
+                entries: t.entries
+            }))
+        });
+    }
+
+    private handleGetBatchConversations(req: Request, res: Response): void {
+        const { batchId } = req.params;
+        const batchService = BatchOperationService.getInstance();
+        
+        const operation = batchService.getBatchOperation(batchId);
+        if (!operation || operation.type !== 'sms') {
+            res.status(404).json({ error: 'Batch SMS operation not found' });
+            return;
+        }
+
+        // Get all conversations for the batch
+        const conversations = operation.results
+            .filter(r => r.conversationId)
+            .map(r => {
+                const conversation = smsStorage.getConversation(r.conversationId!);
+                return conversation;
+            })
+            .filter(c => c !== undefined);
+
+        res.json({
+            batchId,
+            totalConversations: conversations.length,
+            conversations
+        });
+    }
+
+    private handleBatchSSE(req: Request, res: Response): void {
+        const { batchId } = req.params;
+
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': process.env.SSE_CORS_ORIGIN || '*',
+            'Access-Control-Allow-Credentials': 'true',
+        });
+
+        const batchService = BatchOperationService.getInstance();
+
+        const handleBatchUpdate = (data: any) => {
+            if (data.batchId === batchId) {
+                res.write(`event: batch-update\ndata: ${JSON.stringify(data)}\n\n`);
+            }
+        };
+
+        batchService.on(`batch:${batchId}:update`, handleBatchUpdate);
+
+        // Send initial status
+        const operation = batchService.getBatchOperation(batchId);
+        if (operation) {
+            res.write(`event: batch-status\ndata: ${JSON.stringify({
+                batchId,
+                status: operation.status,
+                progress: operation.completedTargets + operation.failedTargets,
+                total: operation.totalTargets
+            })}\n\n`);
+        }
+
+        // Send heartbeat
+        const heartbeat = setInterval(() => {
+            res.write('event: heartbeat\ndata: {}\n\n');
+        }, 30000);
+
+        req.on('close', () => {
+            clearInterval(heartbeat);
+            batchService.off(`batch:${batchId}:update`, handleBatchUpdate);
+        });
     }
 }

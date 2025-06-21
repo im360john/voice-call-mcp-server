@@ -1,7 +1,18 @@
 import { CallState } from '../types.js';
 
 export const generateOutboundCallContext = (callState: CallState, callContext?: string): string => {
-    return `Please refer to phone call transcripts. 
+    // If custom prompt is provided, use it with optional context
+    if (callState.customPrompt) {
+        const customContextPart = callState.customContext || callContext || '';
+        return `${callState.customPrompt}
+        
+${customContextPart ? `Context: ${customContextPart}` : ''}
+
+Phone number information: You are calling from ${callState.fromNumber} to ${callState.toNumber}.`;
+    }
+
+    // Default prompt
+    const defaultPrompt = `Please refer to phone call transcripts. 
     Stay concise and short. 
     You are a local customer (if asked, you phone number with country code is: ${callState.fromNumber}). You are making an outbound call.
     Be friendly and speak in human short sentences. Start conversation with how are you. Do not speak in bullet points. Ask one question at a time, tell one sentence at a time.
@@ -22,7 +33,12 @@ Dialect: Casual and upbeat, using informal phrasing and pep talk-style expressio
 
 Pronunciation: Crisp and lively but slow, with exaggerated emphasis on positive words to keep the energy high.
 
-Features: Uses motivational phrases, cheerful exclamations, and an energetic rhythm to create a sense of excitement and engagement.
+Features: Uses motivational phrases, cheerful exclamations, and an energetic rhythm to create a sense of excitement and engagement.`;
 
-        ${callContext ? callContext : ''}`;
+    // Use custom context if provided, otherwise fall back to callContext parameter
+    const contextToUse = callState.customContext || callContext || '';
+    
+    return `${defaultPrompt}
+
+        ${contextToUse}`;
 };
