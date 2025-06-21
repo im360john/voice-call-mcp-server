@@ -55,7 +55,8 @@ export class ElevenLabsCallHandler {
         );
 
         this.setupEventHandlers();
-        this.initializeElevenLabs();
+        // Delay ElevenLabs initialization to ensure Twilio connection is ready
+        setTimeout(() => this.initializeElevenLabs(), 100);
     }
 
     private endCall(): void {
@@ -107,40 +108,30 @@ export class ElevenLabsCallHandler {
 
     private setupEventHandlers(): void {
         this.twilioStream.setupEventHandlers(
-            async (message) => {
-                // For ElevenLabs, we need to handle Twilio events differently
-                // since we don't have the complex OpenAI context
-                if (message.event === 'media') {
-                    // Forward audio directly to ElevenLabs
-                    if (message.media?.payload) {
-                        this.elevenLabsService.sendAudio(message.media.payload);
+            async (rawMessage) => {
+                try {
+                    // Parse the message if it's a Buffer or string
+                    const message = typeof rawMessage === 'string' || Buffer.isBuffer(rawMessage) 
+                        ? JSON.parse(rawMessage.toString()) 
+                        : rawMessage;
+                    
+                    // For ElevenLabs, we need to handle Twilio events differently
+                    // since we don't have the complex OpenAI context
+                    if (message.event === 'media') {
+                        // Forward audio directly to ElevenLabs
+                        if (message.media?.payload) {
+                            this.elevenLabsService.sendAudio(message.media.payload);
+                        }
+                    } else if (message.event === 'start') {
+                        // Let the regular processor handle start event
+                        // It now handles null context service properly
+                        await this.twilioEventProcessor.processMessage(rawMessage);
+                    } else {
+                        // Let the regular processor handle other events
+                        await this.twilioEventProcessor.processMessage(rawMessage);
                     }
-                } else if (message.event === 'start') {
-                    // Store stream info
-                    this.callState.streamSid = message.start.streamSid;
-                    this.callState.callSid = message.start.callSid;
-                    
-                    // Initialize transcript
-                    const customParameters = message.start.customParameters || {};
-                    this.callState.fromNumber = customParameters.fromNumber || '';
-                    this.callState.toNumber = customParameters.toNumber || '';
-                    this.callState.callContext = customParameters.callContext || '';
-                    
-                    // Create transcript
-                    this.callState.transcriptId = transcriptStorage.createTranscript(
-                        this.callState.callSid,
-                        this.callState.fromNumber,
-                        this.callState.toNumber
-                    );
-                    
-                    console.log('ElevenLabs call started:', {
-                        callSid: this.callState.callSid,
-                        from: this.callState.fromNumber,
-                        to: this.callState.toNumber
-                    });
-                } else {
-                    // Let the regular processor handle other events
-                    await this.twilioEventProcessor.processMessage(message);
+                } catch (error) {
+                    console.error('Error handling Twilio message in ElevenLabs handler:', error);
                 }
             },
             async () => {
