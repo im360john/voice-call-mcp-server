@@ -245,12 +245,20 @@ export class SimpleElevenLabsHandler {
                         this.callState.fromNumber = msg.start.customParameters?.fromNumber || '';
                         this.callState.toNumber = msg.start.customParameters?.toNumber || '';
                         
-                        // Create transcript
-                        const transcriptId = transcriptStorage.createTranscript(this.callState);
+                        // Check if transcript already exists (created by makeCall)
+                        let transcriptId = transcriptStorage.getTranscriptIdByCallSid(this.callSid || '');
+                        
+                        if (!transcriptId) {
+                            // Only create if it doesn't exist (e.g., for inbound calls)
+                            transcriptId = transcriptStorage.createTranscript(this.callState);
+                            console.log(`[SimpleElevenLabs] Created new transcript with ID: ${transcriptId}`);
+                        } else {
+                            console.log(`[SimpleElevenLabs] Using existing transcript ID: ${transcriptId}`);
+                        }
+                        
                         this.callState.transcriptId = transcriptId;
                         
                         console.log(`[SimpleElevenLabs] Stream started - StreamSid: ${this.streamSid}, CallSid: ${this.callSid}`);
-                        console.log(`[SimpleElevenLabs] Transcript created with ID: ${transcriptId}`);
                         
                         // Emit call started event
                         callEventEmitter.emit('call:status', {
