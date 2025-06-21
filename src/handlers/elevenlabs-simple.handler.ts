@@ -160,18 +160,34 @@ export class SimpleElevenLabsHandler {
                             break;
 
                         case 'agent_response':
-                            console.log(`[SimpleElevenLabs] Agent: ${message.agent_response_event?.agent_response}`);
-                            if (this.callSid) {
-                                transcriptStorage.addEntry(this.callSid, 'assistant', 
-                                    message.agent_response_event?.agent_response || '');
+                            const agentResponse = message.agent_response_event?.agent_response;
+                            console.log(`[SimpleElevenLabs] Agent: ${agentResponse}`);
+                            if (this.callSid && agentResponse) {
+                                transcriptStorage.addEntry(this.callSid, 'assistant', agentResponse);
+                                
+                                // Emit SSE event for real-time updates
+                                callEventEmitter.emit('call:transcription', {
+                                    callSid: this.callSid,
+                                    speaker: 'ai',
+                                    transcription: agentResponse,
+                                    timestamp: new Date()
+                                });
                             }
                             break;
 
                         case 'user_transcript':
-                            console.log(`[SimpleElevenLabs] User: ${message.user_transcription_event?.user_transcript}`);
-                            if (this.callSid) {
-                                transcriptStorage.addEntry(this.callSid, 'user', 
-                                    message.user_transcription_event?.user_transcript || '');
+                            const userTranscript = message.user_transcription_event?.user_transcript;
+                            console.log(`[SimpleElevenLabs] User: ${userTranscript}`);
+                            if (this.callSid && userTranscript) {
+                                transcriptStorage.addEntry(this.callSid, 'user', userTranscript);
+                                
+                                // Emit SSE event for real-time updates
+                                callEventEmitter.emit('call:transcription', {
+                                    callSid: this.callSid,
+                                    speaker: 'human',
+                                    transcription: userTranscript,
+                                    timestamp: new Date()
+                                });
                             }
                             break;
 

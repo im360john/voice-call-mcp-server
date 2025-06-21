@@ -129,24 +129,23 @@ export class ElevenLabsEventService {
      * Handle user transcript
      */
     private handleUserTranscript(message: ElevenLabsMessage): void {
-        const transcript = message.user_transcript;
+        // Access the transcript from the correct nested property
+        const transcript = message.user_transcription_event?.user_transcript || message.user_transcript;
         
         if (transcript && this.callState.callSid) {
             console.log(`User: ${transcript}`);
             
-            // Store transcript
-            transcriptStorage.addMessage(
+            // Store transcript using the correct method
+            transcriptStorage.addEntry(
                 this.callState.callSid,
-                this.callState.transcriptId,
                 'user',
                 transcript
             );
 
-            // Emit transcription event
+            // Emit transcription event with correct speaker value
             callEventEmitter.emit('call:transcription', {
                 callSid: this.callState.callSid,
-                transcriptId: this.callState.transcriptId,
-                speaker: 'user',
+                speaker: 'human',
                 transcription: transcript,
                 timestamp: new Date()
             });
@@ -166,24 +165,23 @@ export class ElevenLabsEventService {
      * Handle agent response
      */
     private handleAgentResponse(message: ElevenLabsMessage): void {
-        const response = message.agent_response;
+        // Access the response from the correct nested property
+        const response = message.agent_response_event?.agent_response || message.agent_response;
         
         if (response && this.callState.callSid) {
             console.log(`Agent: ${response}`);
             
-            // Store transcript
-            transcriptStorage.addMessage(
+            // Store transcript using the correct method
+            transcriptStorage.addEntry(
                 this.callState.callSid,
-                this.callState.transcriptId,
                 'assistant',
                 response
             );
 
-            // Emit transcription event
+            // Emit transcription event with correct speaker value
             callEventEmitter.emit('call:transcription', {
                 callSid: this.callState.callSid,
-                transcriptId: this.callState.transcriptId,
-                speaker: 'assistant',
+                speaker: 'ai',
                 transcription: response,
                 timestamp: new Date()
             });
