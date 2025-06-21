@@ -95,9 +95,10 @@ export class ElevenLabsWsService {
                         initialConfig.conversation_config_override.agent.first_message = this.config.firstMessage;
                     }
                     
-                    console.log('Sending initial configuration with overrides to ElevenLabs:', initialConfig);
+                    console.log('Sending initial configuration WITH OVERRIDES to ElevenLabs:', initialConfig);
+                    console.log('Override details - Prompt:', this.config.prompt, 'FirstMessage:', this.config.firstMessage);
                 } else {
-                    console.log('Sending initial configuration without overrides - using agent defaults');
+                    console.log('Sending initial configuration WITHOUT overrides - using agent defaults for agent ID:', this.config.agentId);
                 }
                 
                 this.webSocket.send(JSON.stringify(initialConfig));

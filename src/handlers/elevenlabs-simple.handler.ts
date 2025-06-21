@@ -65,24 +65,35 @@ export class SimpleElevenLabsHandler {
             this.elevenLabsWs.on('open', () => {
                 console.log('[SimpleElevenLabs] Connected to Conversational AI');
 
-                // Send initial configuration exactly like the working example
-                const initialConfig = {
-                    type: "conversation_initiation_client_data",
-                    conversation_config_override: {
-                        agent: {
-                            prompt: {
-                                prompt: this.customParameters?.prompt || 
-                                       process.env.ELEVENLABS_PROMPT || 
-                                       "You are a helpful AI assistant",
-                            },
-                            first_message: this.customParameters?.first_message || 
-                                         process.env.ELEVENLABS_FIRST_MESSAGE ||
-                                         "Hello! How can I help you today?",
-                        },
-                    },
+                // Send initial configuration
+                const initialConfig: any = {
+                    type: "conversation_initiation_client_data"
                 };
 
-                console.log('[SimpleElevenLabs] Sending initial config:', initialConfig);
+                // Only send overrides if explicitly provided via custom parameters or env variables
+                const customPrompt = this.customParameters?.prompt || process.env.ELEVENLABS_PROMPT;
+                const customFirstMessage = this.customParameters?.first_message || process.env.ELEVENLABS_FIRST_MESSAGE;
+                
+                if (customPrompt || customFirstMessage) {
+                    initialConfig.conversation_config_override = {
+                        agent: {}
+                    };
+                    
+                    if (customPrompt) {
+                        initialConfig.conversation_config_override.agent.prompt = {
+                            prompt: customPrompt
+                        };
+                    }
+                    
+                    if (customFirstMessage) {
+                        initialConfig.conversation_config_override.agent.first_message = customFirstMessage;
+                    }
+                    
+                    console.log('[SimpleElevenLabs] Sending initial config WITH OVERRIDES:', initialConfig);
+                } else {
+                    console.log('[SimpleElevenLabs] Sending initial config WITHOUT overrides - using agent defaults');
+                }
+                
                 this.elevenLabsWs!.send(JSON.stringify(initialConfig));
             });
 
