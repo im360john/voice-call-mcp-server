@@ -49,10 +49,17 @@ function setupPort(): number {
  * @returns The public URL provided by ngrok
  */
 async function setupNgrokTunnel(portNumber: number): Promise<string> {
-    const listener = await ngrok.forward({
+    const ngrokConfig: any = {
         addr: portNumber,
         authtoken_from_env: true
-    });
+    };
+
+    // Use domain if provided in environment variables
+    if (process.env.NGROK_DOMAIN) {
+        ngrokConfig.domain = process.env.NGROK_DOMAIN;
+    }
+
+    const listener = await ngrok.forward(ngrokConfig);
 
     const twilioCallbackUrl = listener.url();
     if (!twilioCallbackUrl) {
