@@ -3,6 +3,7 @@ import ngrok from '@ngrok/ngrok';
 import { isPortInUse } from './utils/execution-utils.js';
 import { VoiceCallMcpServer } from './servers/mcp.server.js';
 import { TwilioCallService } from './services/twilio/call.service.js';
+import { TwilioSMSService } from './services/twilio/sms.service.js';
 import { VoiceServer } from './servers/voice.server.js';
 import twilio from 'twilio';
 import { CallSessionManager } from './handlers/openai.handler.js';
@@ -107,6 +108,7 @@ async function main(): Promise<void> {
 
         const sessionManager = new CallSessionManager(twilioClient);
         const twilioCallService = new TwilioCallService(twilioClient);
+        const twilioSMSService = new TwilioSMSService(twilioClient);
 
         // Check if port is already in use
         const portInUse = await isPortInUse(portNumber);
@@ -119,10 +121,10 @@ async function main(): Promise<void> {
         const twilioCallbackUrl = await setupNgrokTunnel(portNumber);
 
         // Start the main HTTP server with MCP HTTP support
-        const server = new VoiceServer(twilioCallbackUrl, sessionManager, twilioCallService);
+        const server = new VoiceServer(twilioCallbackUrl, sessionManager, twilioCallService, twilioSMSService);
         server.start();
 
-        const mcpServer = new VoiceCallMcpServer(twilioCallService, twilioCallbackUrl);
+        const mcpServer = new VoiceCallMcpServer(twilioCallService, twilioSMSService, twilioCallbackUrl);
         await mcpServer.start();
 
         // Set up graceful shutdown

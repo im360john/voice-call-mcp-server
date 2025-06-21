@@ -3,21 +3,25 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { z } from 'zod';
 import { TwilioCallService } from '../services/twilio/call.service.js';
+import { TwilioSMSService } from '../services/twilio/sms.service.js';
 import { transcriptStorage } from '../services/transcript-storage.service.js';
+import { smsStorage } from '../services/sms-storage.service.js';
 
 export class VoiceCallMcpServer {
     private server: McpServer;
     private twilioCallService: TwilioCallService;
+    private twilioSMSService: TwilioSMSService;
     private twilioCallbackUrl: string;
 
-    constructor(twilioCallService: TwilioCallService, twilioCallbackUrl: string) {
+    constructor(twilioCallService: TwilioCallService, twilioSMSService: TwilioSMSService, twilioCallbackUrl: string) {
         this.twilioCallbackUrl = twilioCallbackUrl;
         this.twilioCallService = twilioCallService;
+        this.twilioSMSService = twilioSMSService;
 
         this.server = new McpServer({
-            name: 'Voice Call MCP Server',
-            version: '1.0.0',
-            description: 'MCP server that provides tools for initiating phone calls via Twilio'
+            name: 'Voice Call & SMS MCP Server',
+            version: '1.1.0',
+            description: 'MCP server that provides tools for initiating phone calls and sending SMS messages via Twilio'
         });
 
         this.registerTools();
@@ -160,6 +164,131 @@ export class VoiceCallMcpServer {
                             text: JSON.stringify({
                                 status: 'error',
                                 message: `Failed to generate summary: ${errorMessage}`
+                            })
+                        }],
+                        isError: true
+                    };
+                }
+            }
+        );
+
+        this.server.tool(
+            'send-sms',
+            'Send an SMS message via Twilio',
+            {
+                toNumber: z.string().describe('The phone number to send the SMS to'),
+                message: z.string().describe('The text message to send')
+            },
+            async ({ toNumber, message }) => {
+                try {
+                    const smsMessage = await this.twilioSMSService.sendSMS(toNumber, message);
+                    const conversationId = smsStorage.addMessage(smsMessage);
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'success',
+                                message: 'SMS sent successfully',
+                                messageSid: smsMessage.messageSid,
+                                conversationId: conversationId,
+                                sseUrl: `${this.twilioCallbackUrl}/sms/events?conversationId=${conversationId}`,
+                                info: 'Use the conversationId to retrieve the conversation history'
+                            })
+                        }]
+                    };
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'error',
+                                message: `Failed to send SMS: ${errorMessage}`
+                            })
+                        }],
+                        isError: true
+                    };
+                }
+            }
+        );
+
+        this.server.tool(
+            'get-sms-conversation',
+            'Retrieve an SMS conversation by ID',
+            {
+                conversationId: z.string().describe('The ID of the conversation to retrieve')
+            },
+            async ({ conversationId }) => {
+                try {
+                    const conversation = smsStorage.getConversation(conversationId);
+                    
+                    if (!conversation) {
+                        return {
+                            content: [{
+                                type: 'text',
+                                text: JSON.stringify({
+                                    status: 'error',
+                                    message: 'Conversation not found'
+                                })
+                            }],
+                            isError: true
+                        };
+                    }
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'success',
+                                conversation: conversation
+                            })
+                        }]
+                    };
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'error',
+                                message: `Failed to retrieve conversation: ${errorMessage}`
+                            })
+                        }],
+                        isError: true
+                    };
+                }
+            }
+        );
+
+        this.server.tool(
+            'list-sms-conversations',
+            'List all SMS conversations',
+            {},
+            async () => {
+                try {
+                    const conversations = smsStorage.getAllConversations();
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'success',
+                                conversations: conversations
+                            })
+                        }]
+                    };
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'error',
+                                message: `Failed to list conversations: ${errorMessage}`
                             })
                         }],
                         isError: true

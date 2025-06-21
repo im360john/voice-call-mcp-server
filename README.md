@@ -1,8 +1,8 @@
-# Voice Call MCP Server
+# Voice Call & SMS MCP Server
 
-A Model Context Protocol (MCP) server that enables Claude and other AI assistants to initiate and manage voice calls using Twilio and OpenAI (GPT-4o Realtime model).
+A Model Context Protocol (MCP) server that enables Claude and other AI assistants to initiate and manage voice calls and SMS messages using Twilio and OpenAI (GPT-4o Realtime model for voice).
 
-Use this as a base to kick-start your AI-powered voice calling explorations, save time and develop additional functionality on top of it.
+Use this as a base to kick-start your AI-powered voice calling and SMS messaging explorations, save time and develop additional functionality on top of it.
 
 ![Demo](./assets/demo.gif)
 
@@ -33,7 +33,9 @@ sequenceDiagram
 
 - Make outbound phone calls via Twilio 📞
 - Process call audio in real-time with GPT-4o Realtime model 🎙️
-- **NEW:** Server-Sent Events (SSE) for real-time call updates and transcriptions 📡
+- **NEW:** Send and receive SMS messages via Twilio 💬
+- **NEW:** Server-Sent Events (SSE) for real-time call updates, transcriptions, and SMS notifications 📡
+- Store and retrieve SMS conversation history 📱
 - Real-time language switching during calls 🌐
 - Pre-built prompts for common calling scenarios (like restaurant reservations) 🍽️
 - Automatic public URL tunneling with ngrok 🔄
@@ -121,6 +123,8 @@ If connected, you should see Voice Call under the 🔨 menu.
 
 Here are some natural ways to interact with the server through Claude:
 
+### Voice Calls
+
 1. Simple call:
 ```
 Can you call +1-123-456-7890 and let them know I'll be 15 minutes late for our meeting?
@@ -136,12 +140,30 @@ Please call Delicious Restaurant at +1-123-456-7890 and make a reservation for 4
 Please call Expert Dental NYC (+1-123-456-7899) and reschedule my Monday appointment to next Friday between 4–6pm.
 ```
 
+### SMS Messages
+
+1. Send a simple SMS:
+```
+Send a text message to +1-123-456-7890 saying "Running 10 minutes late, see you soon!"
+```
+
+2. Get SMS conversation history:
+```
+Show me my SMS conversation with +1-123-456-7890
+```
+
+3. List all SMS conversations:
+```
+Show me all my recent SMS conversations
+```
+
 ## Server-Sent Events (SSE) Support
 
-The server now includes real-time Server-Sent Events support for monitoring call progress and receiving live transcriptions.
+The server now includes real-time Server-Sent Events support for monitoring call progress, receiving live transcriptions, and SMS notifications.
 
-### SSE Endpoint
+### SSE Endpoints
 
+#### Voice Calls
 When you initiate a call, the response includes an `sseUrl` that you can connect to for real-time updates:
 
 ```json
@@ -153,13 +175,33 @@ When you initiate a call, the response includes an `sseUrl` that you can connect
 }
 ```
 
+#### SMS Messages
+When you send an SMS, the response includes an `sseUrl` for real-time SMS updates:
+
+```json
+{
+  "status": "success",
+  "message": "SMS sent successfully",
+  "messageSid": "SM1234567890abcdef",
+  "conversationId": "uuid-here",
+  "sseUrl": "https://your-ngrok-url.ngrok.io/sms/events?conversationId=uuid-here"
+}
+```
+
 ### Event Types
 
+#### Voice Call Events
 - **`connected`** - Confirms SSE connection established
 - **`call-status`** - Call status updates (initiated, connected, ended)
 - **`transcription`** - Real-time transcriptions from both AI and human speakers
 - **`call-ended`** - Call termination with duration info
 - **`error`** - Error events during the call
+- **`heartbeat`** - Periodic keepalive events
+
+#### SMS Events
+- **`sms-sent`** - Outbound SMS message sent
+- **`sms-received`** - Inbound SMS message received
+- **`sms-update`** - SMS conversation updated
 - **`heartbeat`** - Periodic keepalive events
 
 ### Example SSE Client
@@ -185,6 +227,7 @@ eventSource.addEventListener('call-status', (event) => {
 3. **Voice Conversations**: The AI will handle natural conversations in real-time
 4. **Call Duration**: Be mindful of call durations as they affect OpenAI API and Twilio costs
 5. **Public Exposure**: Be aware that the ngrok tunnel exposes your server publicly for Twilio to reach it (though with a random URL and protected by a random secret)
+6. **SMS Webhook Configuration**: To receive incoming SMS messages, configure your Twilio phone number webhook to point to `https://your-ngrok-url.ngrok.io/sms/webhook`
 
 ## Troubleshooting
 

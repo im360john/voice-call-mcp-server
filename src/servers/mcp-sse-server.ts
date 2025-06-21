@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { VoiceCallMcpServer } from './mcp.server.js';
 import { TwilioCallService } from '../services/twilio/call.service.js';
+import { TwilioSMSService } from '../services/twilio/sms.service.js';
 
 // Store active SSE transports
 const activeTransports = new Map<string, SSEServerTransport>();
@@ -9,8 +10,8 @@ const activeTransports = new Map<string, SSEServerTransport>();
 export class McpSSEServer {
     private mcpServer: VoiceCallMcpServer;
 
-    constructor(twilioCallService: TwilioCallService, twilioCallbackUrl: string) {
-        this.mcpServer = new VoiceCallMcpServer(twilioCallService, twilioCallbackUrl);
+    constructor(twilioCallService: TwilioCallService, twilioSMSService: TwilioSMSService, twilioCallbackUrl: string) {
+        this.mcpServer = new VoiceCallMcpServer(twilioCallService, twilioSMSService, twilioCallbackUrl);
     }
 
     /**
