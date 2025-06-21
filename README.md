@@ -1,6 +1,6 @@
 # Voice Call & SMS MCP Server
 
-A Model Context Protocol (MCP) server that enables Claude and other AI assistants to initiate and manage voice calls and SMS messages using Twilio and OpenAI (GPT-4o Realtime model for voice).
+A Model Context Protocol (MCP) server that enables Claude and other AI assistants to initiate and manage voice calls and SMS messages using Twilio with support for multiple AI voice providers (OpenAI GPT-4o Realtime and ElevenLabs Conversational AI).
 
 Use this as a base to kick-start your AI-powered voice calling and SMS messaging explorations, save time and develop additional functionality on top of it.
 
@@ -32,11 +32,13 @@ sequenceDiagram
 ## Features
 
 - Make outbound phone calls via Twilio 📞
-- Process call audio in real-time with GPT-4o Realtime model 🎙️
+- **NEW:** Support for multiple AI voice providers:
+  - OpenAI GPT-4o Realtime model (advanced conversational capabilities) 🤖
+  - ElevenLabs Conversational AI (natural-sounding voices) 🎭
 - **NEW:** Send and receive SMS messages via Twilio 💬
-- **NEW:** Server-Sent Events (SSE) for real-time call updates, transcriptions, and SMS notifications 📡
+- Server-Sent Events (SSE) for real-time call updates, transcriptions, and SMS notifications 📡
 - Store and retrieve SMS conversation history 📱
-- Real-time language switching during calls 🌐
+- Real-time language switching during calls (OpenAI) 🌐
 - Pre-built prompts for common calling scenarios (like restaurant reservations) 🍽️
 - Automatic public URL tunneling with ngrok 🔄
 - Secure handling of credentials 🔒
@@ -86,7 +88,9 @@ The server requires several environment variables:
 - `TWILIO_ACCOUNT_SID`: Your Twilio account SID
 - `TWILIO_AUTH_TOKEN`: Your Twilio auth token
 - `TWILIO_NUMBER`: Your Twilio number
-- `OPENAI_API_KEY`: Your OpenAI API key
+- `OPENAI_API_KEY`: Your OpenAI API key (required for OpenAI voice provider)
+- `ELEVENLABS_API_KEY`: Your ElevenLabs API key (optional - for ElevenLabs voice provider)
+- `ELEVENLABS_AGENT_ID`: Your ElevenLabs agent ID (optional - for ElevenLabs voice provider)
 - `NGROK_AUTHTOKEN`: Your ngrok authtoken
 - `RECORD_CALLS`: Set to "true" to record calls (optional)
 
@@ -125,6 +129,7 @@ Here are some natural ways to interact with the server through Claude:
 
 ### Voice Calls
 
+#### Using OpenAI (default):
 1. Simple call:
 ```
 Can you call +1-123-456-7890 and let them know I'll be 15 minutes late for our meeting?
@@ -139,6 +144,19 @@ Please call Delicious Restaurant at +1-123-456-7890 and make a reservation for 4
 ```
 Please call Expert Dental NYC (+1-123-456-7899) and reschedule my Monday appointment to next Friday between 4–6pm.
 ```
+
+#### Using ElevenLabs:
+1. Call with natural voice:
+```
+Using ElevenLabs, call +1-123-456-7890 and confirm the delivery address for order #12345.
+```
+
+2. Customer service call:
+```
+Use ElevenLabs voice to call +1-123-456-7890 and inquire about the warranty status for my laptop serial number ABC123.
+```
+
+Note: When using ElevenLabs, the AI agent's behavior is pre-configured in your ElevenLabs agent settings.
 
 ### SMS Messages
 
@@ -220,14 +238,27 @@ eventSource.addEventListener('call-status', (event) => {
 });
 ```
 
+## Voice Provider Comparison
+
+### OpenAI GPT-4o Realtime
+- **Pros**: Advanced conversational capabilities, context-aware responses, real-time language switching
+- **Cons**: Can sound robotic, higher latency, more expensive
+- **Best for**: Complex conversations, multi-language support, dynamic prompts
+
+### ElevenLabs Conversational AI
+- **Pros**: Natural-sounding voices, lower latency, pre-configured agents
+- **Cons**: Less flexible, requires agent setup, no dynamic prompt changes
+- **Best for**: Customer service, simple interactions, when voice quality is priority
+
 ## Important Notes
 
 1. **Phone Number Format**: All phone numbers must be in E.164 format (e.g., +11234567890)
-2. **Rate Limits**: Be aware of your Twilio and OpenAI account's rate limits and pricing
+2. **Rate Limits**: Be aware of your Twilio, OpenAI, and ElevenLabs account rate limits and pricing
 3. **Voice Conversations**: The AI will handle natural conversations in real-time
-4. **Call Duration**: Be mindful of call durations as they affect OpenAI API and Twilio costs
+4. **Call Duration**: Be mindful of call durations as they affect API costs
 5. **Public Exposure**: Be aware that the ngrok tunnel exposes your server publicly for Twilio to reach it (though with a random URL and protected by a random secret)
 6. **SMS Webhook Configuration**: To receive incoming SMS messages, configure your Twilio phone number webhook to point to `https://your-ngrok-url.ngrok.io/sms/webhook`
+7. **ElevenLabs Agent Setup**: For ElevenLabs, you must pre-configure your agent in the ElevenLabs dashboard before using it
 
 ## Troubleshooting
 
@@ -247,6 +278,11 @@ Common error messages and solutions:
 
 5. "OpenAI Realtime does not detect the end of voice input, or is lagging."
    - Sometimes, there might be voice encoding issues between Twilio and the receiver's network operator. Try using a different receiver.
+
+6. "ElevenLabs API error"
+   - Verify your ELEVENLABS_API_KEY and ELEVENLABS_AGENT_ID are correct
+   - Ensure your ElevenLabs agent is properly configured and published
+   - Check that your ElevenLabs account has sufficient credits
 
 ## Contributing
 

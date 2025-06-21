@@ -2,7 +2,7 @@ import twilio from 'twilio';
 import { DYNAMIC_API_SECRET, RECORD_CALLS } from '../../config/constants.js';
 import { callEventEmitter } from '../sse.service.js';
 import { transcriptStorage } from '../transcript-storage.service.js';
-import { CallState } from '../../types.js';
+import { CallState, AIProvider } from '../../types.js';
 
 /**
  * Service for handling Twilio call operations
@@ -69,16 +69,19 @@ export class TwilioCallService {
     }
 
 
-    public async makeCall(twilioCallbackUrl: string, toNumber: string, callContext = ''): Promise<string> {
+    public async makeCall(twilioCallbackUrl: string, toNumber: string, callContext = '', provider: AIProvider = AIProvider.OPENAI): Promise<string> {
         try {
             const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
             const callContextEncoded =  encodeURIComponent(callContext);
+            
+            // Determine the endpoint based on provider
+            const endpoint = provider === AIProvider.ELEVENLABS ? '/call/outgoing/elevenlabs' : '/call/outgoing';
 
             const call = await twilioClient.calls.create({
                 to: toNumber,
                 from: process.env.TWILIO_NUMBER || '',
-                url: `${twilioCallbackUrl}/call/outgoing?apiSecret=${DYNAMIC_API_SECRET}&callType=outgoing&callContext=${callContextEncoded}`,
+                url: `${twilioCallbackUrl}${endpoint}?apiSecret=${DYNAMIC_API_SECRET}&callType=outgoing&callContext=${callContextEncoded}`,
             });
 
             // Pre-create transcript for this call

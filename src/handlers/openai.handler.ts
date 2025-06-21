@@ -1,7 +1,7 @@
 import { WebSocket } from 'ws';
 import twilio from 'twilio';
 import dotenv from 'dotenv';
-import { CallState, CallType, OpenAIConfig } from '../types.js';
+import { CallState, CallType, OpenAIConfig, AIProvider } from '../types.js';
 import { VOICE } from '../config/constants.js';
 import { OpenAIContextService } from '../services/openai/context.service.js';
 import { OpenAIWsService } from '../services/openai/ws.service.js';
@@ -12,6 +12,7 @@ import { SessionManagerService } from '../services/session-manager.service.js';
 import { TwilioCallService } from '../services/twilio/call.service.js';
 import { transcriptStorage } from '../services/transcript-storage.service.js';
 import { callEventEmitter } from '../services/sse.service.js';
+import { ElevenLabsCallHandler } from './elevenlabs.handler.js';
 
 dotenv.config();
 
@@ -130,17 +131,26 @@ export class OpenAICallHandler {
  */
 export class CallSessionManager {
     private readonly sessionManager: SessionManagerService;
+    private readonly twilioClient: twilio.Twilio;
 
     constructor(twilioClient: twilio.Twilio) {
         this.sessionManager = new SessionManagerService(twilioClient);
+        this.twilioClient = twilioClient;
     }
 
     /**
      * Creates a new call session
      * @param ws The WebSocket connection
      * @param callType The type of call
+     * @param provider The AI provider to use (defaults to OpenAI)
      */
-    public createSession(ws: WebSocket, callType: CallType): void {
-        this.sessionManager.createSession(ws, callType);
+    public createSession(ws: WebSocket, callType: CallType, provider: AIProvider = AIProvider.OPENAI): void {
+        if (provider === AIProvider.ELEVENLABS) {
+            // Use ElevenLabs handler
+            new ElevenLabsCallHandler(ws, callType, this.twilioClient);
+        } else {
+            // Use OpenAI handler (default)
+            this.sessionManager.createSession(ws, callType);
+        }
     }
 }

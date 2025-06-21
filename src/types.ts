@@ -65,3 +65,51 @@ export interface TwilioConfig {
     authToken: string;
     recordCalls: boolean;
 }
+
+/**
+ * AI Provider types
+ */
+export enum AIProvider {
+    OPENAI = 'openai',
+    ELEVENLABS = 'elevenlabs'
+}
+
+/**
+ * Configuration for ElevenLabs
+ */
+export interface ElevenLabsConfig {
+    apiKey: string;
+    agentId: string;
+}
+
+/**
+ * ElevenLabs WebSocket message types
+ */
+export interface ElevenLabsMessage {
+    type: string;
+    [key: string]: any;
+}
+
+export interface ElevenLabsAudioEvent {
+    audio_event: {
+        audio_base_64: string;
+        track_id: string;
+        sample_rate: number;
+        channels: number;
+    };
+}
+
+export interface ElevenLabsTranscript {
+    transcript: string;
+    timestamp: Date;
+}
+
+export interface ElevenLabsAgentResponse {
+    agent_response: string;
+    timestamp: Date;
+}
+
+export interface ElevenLabsUserTranscript {
+    user_transcript: string;
+    timestamp: Date;
+}

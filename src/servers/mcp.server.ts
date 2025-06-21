@@ -6,6 +6,7 @@ import { TwilioCallService } from '../services/twilio/call.service.js';
 import { TwilioSMSService } from '../services/twilio/sms.service.js';
 import { transcriptStorage } from '../services/transcript-storage.service.js';
 import { smsStorage } from '../services/sms-storage.service.js';
+import { AIProvider } from '../types.js';
 
 export class VoiceCallMcpServer {
     private server: McpServer;
@@ -35,11 +36,15 @@ export class VoiceCallMcpServer {
             'Trigger an outbound phone call via Twilio',
             {
                 toNumber: z.string().describe('The phone number to call'),
-                callContext: z.string().describe('Context for the call')
+                callContext: z.string().describe('Context for the call'),
+                provider: z.enum(['openai', 'elevenlabs']).optional().describe('AI provider to use for the call (defaults to openai)')
             },
-            async ({ toNumber, callContext }) => {
+            async ({ toNumber, callContext, provider }) => {
                 try {
-                    const callSid = await this.twilioCallService.makeCall(this.twilioCallbackUrl, toNumber, callContext);
+                    // Map string provider to enum
+                    const aiProvider = provider === 'elevenlabs' ? AIProvider.ELEVENLABS : AIProvider.OPENAI;
+                    
+                    const callSid = await this.twilioCallService.makeCall(this.twilioCallbackUrl, toNumber, callContext, aiProvider);
 
                     // Get transcript ID for this call
                     const transcriptId = transcriptStorage.getTranscriptIdByCallSid(callSid);
@@ -56,6 +61,7 @@ export class VoiceCallMcpServer {
                                 callSid: callSid,
                                 transcriptId: transcriptId,
                                 sseUrl: sseUrl,
+                                provider: provider || 'openai',
                                 info: 'Connect to the SSE URL to receive real-time call updates and transcriptions. Use the transcriptId to retrieve the transcript later.'
                             })
                         }]

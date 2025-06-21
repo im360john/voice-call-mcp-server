@@ -63,6 +63,14 @@ export class TwilioWsService {
     }
 
     /**
+     * Send base64 audio data to Twilio (for ElevenLabs compatibility)
+     * @param audioBase64 The base64 encoded audio data
+     */
+    public sendAudioBase64(audioBase64: string): void {
+        this.sendAudio(audioBase64);
+    }
+
+    /**
      * Clear the Twilio stream
      */
     public clearStream(): void {
