@@ -75,19 +75,31 @@ export class ElevenLabsWsService {
                 console.log('Connected to ElevenLabs WebSocket');
                 
                 // Send initial configuration message
-                const initialConfig = {
-                    type: "conversation_initiation_client_data",
-                    conversation_config_override: {
-                        agent: {
-                            prompt: {
-                                prompt: this.config.prompt || "You are a helpful AI assistant.",
-                            },
-                            first_message: this.config.firstMessage || "Hello! How can I help you today?",
-                        },
-                    },
+                const initialConfig: any = {
+                    type: "conversation_initiation_client_data"
                 };
                 
-                console.log('Sending initial configuration to ElevenLabs:', initialConfig);
+                // Only send overrides if explicitly provided
+                if (this.config.prompt || this.config.firstMessage) {
+                    initialConfig.conversation_config_override = {
+                        agent: {}
+                    };
+                    
+                    if (this.config.prompt) {
+                        initialConfig.conversation_config_override.agent.prompt = {
+                            prompt: this.config.prompt
+                        };
+                    }
+                    
+                    if (this.config.firstMessage) {
+                        initialConfig.conversation_config_override.agent.first_message = this.config.firstMessage;
+                    }
+                    
+                    console.log('Sending initial configuration with overrides to ElevenLabs:', initialConfig);
+                } else {
+                    console.log('Sending initial configuration without overrides - using agent defaults');
+                }
+                
                 this.webSocket.send(JSON.stringify(initialConfig));
                 
                 this.startKeepAlive();
