@@ -55,16 +55,24 @@ export class TranscriptStorageService {
    */
   public addEntry(callSid: string, role: 'user' | 'assistant', content: string): void {
     const transcriptId = this.callToTranscriptMap.get(callSid);
-    if (!transcriptId) return;
+    if (!transcriptId) {
+      console.log(`[TranscriptStorage] WARNING: No transcript ID found for callSid: ${callSid}`);
+      return;
+    }
 
     const transcript = this.transcripts.get(transcriptId);
-    if (!transcript) return;
+    if (!transcript) {
+      console.log(`[TranscriptStorage] WARNING: No transcript found for ID: ${transcriptId}`);
+      return;
+    }
 
     transcript.entries.push({
       role,
       content,
       timestamp: new Date()
     });
+    
+    console.log(`[TranscriptStorage] Added entry for ${role}: "${content.substring(0, 50)}..." (${transcript.entries.length} total entries)`);
   }
 
   /**
@@ -88,14 +96,18 @@ export class TranscriptStorageService {
    * Get a transcript by ID
    */
   public getTranscript(transcriptId: string): StoredTranscript | undefined {
-    return this.transcripts.get(transcriptId);
+    const transcript = this.transcripts.get(transcriptId);
+    console.log(`[TranscriptStorage] Getting transcript by ID: ${transcriptId}, found: ${!!transcript}, entries: ${transcript?.entries.length || 0}`);
+    return transcript;
   }
 
   /**
    * Get transcript ID by call SID
    */
   public getTranscriptIdByCallSid(callSid: string): string | undefined {
-    return this.callToTranscriptMap.get(callSid);
+    const transcriptId = this.callToTranscriptMap.get(callSid);
+    console.log(`[TranscriptStorage] Getting transcript ID by callSid: ${callSid}, found: ${transcriptId}`);
+    return transcriptId;
   }
 
   /**

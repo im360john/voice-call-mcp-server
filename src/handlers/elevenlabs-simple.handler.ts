@@ -162,8 +162,14 @@ export class SimpleElevenLabsHandler {
                         case 'agent_response':
                             const agentResponse = message.agent_response_event?.agent_response;
                             console.log(`[SimpleElevenLabs] Agent: ${agentResponse}`);
+                            
+                            if (!this.callSid) {
+                                console.log('[SimpleElevenLabs] WARNING: No callSid available for agent response');
+                            }
+                            
                             if (this.callSid && agentResponse) {
                                 transcriptStorage.addEntry(this.callSid, 'assistant', agentResponse);
+                                console.log(`[SimpleElevenLabs] Stored agent transcript for callSid: ${this.callSid}`);
                                 
                                 // Emit SSE event for real-time updates
                                 callEventEmitter.emit('call:transcription', {
@@ -178,8 +184,14 @@ export class SimpleElevenLabsHandler {
                         case 'user_transcript':
                             const userTranscript = message.user_transcription_event?.user_transcript;
                             console.log(`[SimpleElevenLabs] User: ${userTranscript}`);
+                            
+                            if (!this.callSid) {
+                                console.log('[SimpleElevenLabs] WARNING: No callSid available for user transcript');
+                            }
+                            
                             if (this.callSid && userTranscript) {
                                 transcriptStorage.addEntry(this.callSid, 'user', userTranscript);
+                                console.log(`[SimpleElevenLabs] Stored user transcript for callSid: ${this.callSid}`);
                                 
                                 // Emit SSE event for real-time updates
                                 callEventEmitter.emit('call:transcription', {
@@ -238,6 +250,7 @@ export class SimpleElevenLabsHandler {
                         this.callState.transcriptId = transcriptId;
                         
                         console.log(`[SimpleElevenLabs] Stream started - StreamSid: ${this.streamSid}, CallSid: ${this.callSid}`);
+                        console.log(`[SimpleElevenLabs] Transcript created with ID: ${transcriptId}`);
                         
                         // Emit call started event
                         callEventEmitter.emit('call:status', {
