@@ -84,20 +84,22 @@ export class SimpleElevenLabsHandler {
                 // Use custom context if provided
                 const customContext = this.customParameters?.customContext 
                     ? decodeURIComponent(this.customParameters.customContext)
+                    : this.customParameters?.callContext 
+                    ? decodeURIComponent(this.customParameters.callContext)
                     : null;
                 
-                if (customPrompt || customFirstMessage) {
+                // For ElevenLabs, if we have context but no prompt, use the context as the prompt
+                // This handles cases where the user says "ask if they want pizza"
+                const effectivePrompt = customPrompt || customContext;
+                
+                if (effectivePrompt || customFirstMessage) {
                     initialConfig.conversation_config_override = {
                         agent: {}
                     };
                     
-                    if (customPrompt) {
-                        let finalPrompt = customPrompt;
-                        if (customContext) {
-                            finalPrompt = `${customPrompt}\n\nContext: ${customContext}`;
-                        }
+                    if (effectivePrompt) {
                         initialConfig.conversation_config_override.agent.prompt = {
-                            prompt: finalPrompt
+                            prompt: effectivePrompt
                         };
                     }
                     
