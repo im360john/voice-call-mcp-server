@@ -51,7 +51,9 @@ function setupPort(): number {
 async function setupNgrokTunnel(portNumber: number): Promise<string> {
     const ngrokConfig: any = {
         addr: portNumber,
-        authtoken_from_env: true
+        authtoken_from_env: true,
+        // Enable pooling to allow multiple endpoints on the same domain
+        pooling_enabled: true
     };
 
     // Use domain if provided in environment variables
@@ -59,14 +61,42 @@ async function setupNgrokTunnel(portNumber: number): Promise<string> {
         ngrokConfig.domain = process.env.NGROK_DOMAIN;
     }
 
-    const listener = await ngrok.forward(ngrokConfig);
+    try {
+        const listener = await ngrok.forward(ngrokConfig);
 
-    const twilioCallbackUrl = listener.url();
-    if (!twilioCallbackUrl) {
-        throw new Error('Failed to obtain ngrok URL');
+        const twilioCallbackUrl = listener.url();
+        if (!twilioCallbackUrl) {
+            throw new Error('Failed to obtain ngrok URL');
+        }
+
+        return twilioCallbackUrl;
+    } catch (error: any) {
+        // If the endpoint is already online, try to disconnect and reconnect
+        if (error.errorCode === 'ERR_NGROK_334') {
+            console.log('Ngrok endpoint already online. Attempting to disconnect and reconnect...');
+            
+            try {
+                // Try to disconnect existing connections
+                await ngrok.disconnect();
+                await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+                
+                // Try again
+                const listener = await ngrok.forward(ngrokConfig);
+                const twilioCallbackUrl = listener.url();
+                
+                if (!twilioCallbackUrl) {
+                    throw new Error('Failed to obtain ngrok URL after retry');
+                }
+                
+                return twilioCallbackUrl;
+            } catch (retryError) {
+                console.error('Failed to reconnect after disconnect:', retryError);
+                throw new Error('Ngrok endpoint is already in use. Please check https://dashboard.ngrok.com/endpoints/status and stop the existing endpoint.');
+            }
+        }
+        
+        throw error;
     }
-
-    return twilioCallbackUrl;
 }
 
 /**
@@ -110,6 +140,14 @@ async function main(): Promise<void> {
     try {
         validateEnvironmentVariables();
         const portNumber = setupPort();
+        
+        // Disconnect any existing ngrok connections at startup
+        try {
+            await ngrok.disconnect();
+            console.log('Disconnected any existing ngrok connections');
+        } catch (e) {
+            // Ignore errors if nothing to disconnect
+        }
 
         const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
