@@ -107,6 +107,12 @@ export class TwilioCallService {
                 to: toNumber,
                 from: process.env.TWILIO_NUMBER || '',
                 url: `${twilioCallbackUrl}${endpoint}?${queryParams.toString()}`,
+                // Enable answering machine detection
+                machineDetection: 'Enable',
+                machineDetectionTimeout: 3000,
+                asyncAmd: true,
+                asyncAmdStatusCallback: `${twilioCallbackUrl}/call/amd-status?apiSecret=${DYNAMIC_API_SECRET}`,
+                asyncAmdStatusCallbackMethod: 'POST'
             });
 
             // Pre-create transcript for this call
@@ -118,6 +124,9 @@ export class TwilioCallService {
             callState.batchId = batchId;
             callState.customPrompt = customPrompt;
             callState.customContext = customContext;
+            // Set the original provider for later switching
+            callState.ivrState.originalProvider = provider;
+            callState.ivrState.currentProvider = provider;
             
             const transcriptId = transcriptStorage.createTranscript(callState, batchId);
 

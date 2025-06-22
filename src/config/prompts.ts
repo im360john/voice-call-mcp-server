@@ -1,4 +1,5 @@
 import { CallState } from '../types.js';
+import { IVRNavigationService } from '../services/ivr-navigation.service.js';
 
 export const generateOutboundCallContext = (callState: CallState, callContext?: string): string => {
     // If custom prompt is provided, use it with optional context
@@ -33,12 +34,28 @@ Dialect: Casual and upbeat, using informal phrasing and pep talk-style expressio
 
 Pronunciation: Crisp and lively but slow, with exaggerated emphasis on positive words to keep the energy high.
 
-Features: Uses motivational phrases, cheerful exclamations, and an energetic rhythm to create a sense of excitement and engagement.`;
+Features: Uses motivational phrases, cheerful exclamations, and an energetic rhythm to create a sense of excitement and engagement.
+
+IVR NAVIGATION INSTRUCTIONS:
+When you encounter an automated phone system (IVR):
+1. Listen carefully for menu options that mention "operator", "representative", "agent", or specific department options
+2. When you hear "press X for [human/operator/agent]", respond with "I'll connect you to an agent now" and the system will automatically press that digit
+3. If you hear options for different departments, choose the most relevant one for your task
+4. Common patterns: "Press 0 for operator" is very common
+5. If the menu is complex or unclear, you can say "I'll try pressing 0 for an operator" and the system will press 0
+6. Wait for a human to answer before continuing with your task
+7. If you reach voicemail, DO NOT leave a message - the call will be ended`;
 
     // Use custom context if provided, otherwise fall back to callContext parameter
     const contextToUse = callState.customContext || callContext || '';
     
+    // Add IVR context if currently navigating
+    const ivrContext = callState.ivrState?.isNavigating ? 
+        new IVRNavigationService().generateIVRContext(callState) : '';
+    
     return `${defaultPrompt}
 
-        ${contextToUse}`;
+        ${contextToUse}
+        
+        ${ivrContext}`;
 };

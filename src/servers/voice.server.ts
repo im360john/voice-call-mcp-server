@@ -55,6 +55,9 @@ export class VoiceServer {
         this.app.post('/call/outgoing/elevenlabs', this.handleElevenLabsOutgoingCall.bind(this));
         this.app.ws('/call/connection-elevenlabs/:secret', this.handleElevenLabsConnection.bind(this));
         
+        // AMD webhook route
+        this.app.post('/call/amd-status', this.handleAMDStatus.bind(this));
+        
         // SSE endpoint
         this.app.get('/events', handleSSE);
 
@@ -144,17 +147,26 @@ export class VoiceServer {
         const batchId = req.query.batchId?.toString();
         const customPrompt = req.query.customPrompt?.toString();
         const customContext = req.query.customContext?.toString();
+        const callSid = req.body.CallSid;
+
+        // Check if AMD detected a machine and we need to use OpenAI for IVR
+        const callState = this.sessionManager.getCallState(callSid);
+        const shouldUseOpenAI = callState?.ivrState?.amdStatus === 'machine' || 
+                               callState?.ivrState?.currentProvider === AIProvider.OPENAI;
 
         const twiml = new VoiceResponse();
         const connect = twiml.connect();
 
+        // Route to appropriate handler based on IVR needs
+        const endpoint = shouldUseOpenAI ? 'connection-outgoing' : 'connection-elevenlabs';
         const stream = connect.stream({
-            url: `${this.callbackUrl.replace('https://', 'wss://')}/call/connection-elevenlabs/${apiSecret}`,
+            url: `${this.callbackUrl.replace('https://', 'wss://')}/call/${endpoint}/${apiSecret}`,
         });
 
         stream.parameter({ name: 'fromNumber', value: fromNumber });
         stream.parameter({ name: 'toNumber', value: toNumber });
         stream.parameter({ name: 'callContext', value: callContext });
+        stream.parameter({ name: 'originalProvider', value: 'elevenlabs' });
         if (batchId) stream.parameter({ name: 'batchId', value: batchId });
         if (customPrompt) stream.parameter({ name: 'customPrompt', value: customPrompt });
         if (customContext) stream.parameter({ name: 'customContext', value: customContext });
@@ -455,5 +467,42 @@ export class VoiceServer {
             clearInterval(heartbeat);
             batchService.off(`batch:${batchId}:update`, handleBatchUpdate);
         });
+    }
+
+    private async handleAMDStatus(req: express.Request, res: Response): Promise<void> {
+        // Verify API secret
+        if (req.query.apiSecret?.toString() !== DYNAMIC_API_SECRET) {
+            res.status(401).json({ error: 'Unauthorized: Invalid or missing API secret' });
+            return;
+        }
+
+        const { AnsweredBy, CallSid, CallStatus } = req.body;
+        console.log(`AMD Status for call ${CallSid}: ${AnsweredBy}`);
+
+        // Emit AMD event
+        callEventEmitter.emit('amdStatus', {
+            callSid: CallSid,
+            answeredBy: AnsweredBy,
+            callStatus: CallStatus,
+            timestamp: new Date().toISOString()
+        });
+
+        // Update call state if exists
+        const callState = this.sessionManager.getCallState(CallSid);
+        if (callState) {
+            callState.ivrState.amdStatus = AnsweredBy.toLowerCase();
+            
+            // If machine detected and using ElevenLabs, switch to OpenAI
+            if (AnsweredBy.toLowerCase() === 'machine' && 
+                callState.ivrState.originalProvider === AIProvider.ELEVENLABS &&
+                callState.ivrState.currentProvider === AIProvider.ELEVENLABS) {
+                
+                console.log(`Machine detected for ElevenLabs call ${CallSid}, marking for OpenAI handling`);
+                callState.ivrState.currentProvider = AIProvider.OPENAI;
+                callState.ivrState.isNavigating = true;
+            }
+        }
+
+        res.status(200).send('OK');
     }
 }

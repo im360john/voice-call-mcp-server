@@ -9,6 +9,42 @@ export interface ConversationMessage {
     name?: string;
 }
 
+/**
+ * IVR navigation state for handling automated phone systems
+ */
+export interface IVRState {
+    isNavigating: boolean;
+    humanDetected: boolean;
+    originalProvider: AIProvider;
+    currentProvider: AIProvider;
+    menuLevel: number;
+    optionsHeard: string[];
+    actionsToken: string[];
+    waitingForResponse: boolean;
+    amdStatus: 'unknown' | 'human' | 'machine' | 'fax' | 'unknown';
+}
+
+/**
+ * IVR configuration for call handling
+ */
+export interface IVRConfig {
+    enabled: boolean;
+    maxMenuDepth: number;
+    humanPhrases: string[];
+    defaultAction: string;
+    timeout: number;
+}
+
+/**
+ * IVR detection rule for pattern matching
+ */
+export interface IVRRule {
+    pattern: RegExp;
+    action: string;
+    delay?: number;
+    confidence?: number;
+}
+
 export class CallState {
     // Call identification
     streamSid = '';
@@ -46,6 +82,19 @@ export class CallState {
     lastAssistantItemId: string | null = null;
     markQueue: string[] = [];
     hasSeenMedia = false;
+
+    // IVR navigation state
+    ivrState: IVRState = {
+        isNavigating: false,
+        humanDetected: false,
+        originalProvider: AIProvider.OPENAI,
+        currentProvider: AIProvider.OPENAI,
+        menuLevel: 0,
+        optionsHeard: [],
+        actionsToken: [],
+        waitingForResponse: false,
+        amdStatus: 'unknown'
+    };
 
     constructor(callType: CallType = CallType.OUTBOUND) {
         this.callType = callType;

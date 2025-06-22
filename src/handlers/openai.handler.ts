@@ -14,6 +14,8 @@ import { transcriptStorage } from '../services/transcript-storage.service.js';
 import { callEventEmitter } from '../services/sse.service.js';
 import { SimpleElevenLabsHandler } from './elevenlabs-simple.handler.js';
 import { BatchOperationService } from '../services/batch-operation.service.js';
+import { IVRNavigationService } from '../services/ivr-navigation.service.js';
+import { ProviderSwitchService } from '../services/provider-switch.service.js';
 
 dotenv.config();
 
@@ -28,14 +30,20 @@ export class OpenAICallHandler {
     private readonly twilioCallService: TwilioCallService;
     private readonly callState: CallState;
     private readonly batchService: BatchOperationService;
+    private readonly ivrNavigationService: IVRNavigationService;
+    private readonly providerSwitchService: ProviderSwitchService;
 
-    constructor(ws: WebSocket, callType: CallType, twilioClient: twilio.Twilio, contextService: OpenAIContextService) {
+    constructor(ws: WebSocket, callType: CallType, twilioClient: twilio.Twilio, contextService: OpenAIContextService, providerSwitchService?: ProviderSwitchService) {
         this.callState = new CallState(callType);
         this.batchService = BatchOperationService.getInstance();
 
         // Initialize Twilio services
         this.twilioStream = new TwilioWsService(ws, this.callState);
         this.twilioCallService = new TwilioCallService(twilioClient);
+        
+        // Initialize IVR navigation and provider switching
+        this.ivrNavigationService = new IVRNavigationService();
+        this.providerSwitchService = providerSwitchService || new ProviderSwitchService(this.twilioCallService);
 
         // Initialize OpenAI service
         const openAIConfig: OpenAIConfig = {
@@ -59,6 +67,18 @@ export class OpenAICallHandler {
             this.twilioCallService,
             contextService,
             (payload) => this.openAIService.sendAudio(payload),// Log the first media event
+        );
+
+        // Wire up IVR navigation services
+        this.openAIEventProcessor.setIVRNavigationService(this.ivrNavigationService);
+        this.openAIEventProcessor.setTwilioWsService(this.twilioStream);
+
+        // Register this connection with provider switch service
+        this.providerSwitchService.registerConnection(
+            this.callState.callSid,
+            AIProvider.OPENAI,
+            ws,
+            this.openAIService as any
         );
 
         this.setupEventHandlers();
@@ -158,12 +178,16 @@ export class CallSessionManager {
      * @param provider The AI provider to use (defaults to OpenAI)
      */
     public createSession(ws: WebSocket, callType: CallType, provider: AIProvider = AIProvider.OPENAI): void {
-        if (provider === AIProvider.ELEVENLABS) {
-            // Use simplified ElevenLabs handler based on working example
-            new SimpleElevenLabsHandler(ws, callType, this.twilioClient);
-        } else {
-            // Use OpenAI handler (default)
-            this.sessionManager.createSession(ws, callType);
-        }
+        // Use session manager which now handles provider routing and switching
+        this.sessionManager.createSession(ws, callType, provider);
+    }
+    
+    /**
+     * Get call state by call SID
+     * @param callSid The call SID
+     * @returns The call state if found
+     */
+    public getCallState(callSid: string): CallState | undefined {
+        return this.sessionManager.getCallState(callSid);
     }
 }

@@ -4,6 +4,8 @@ import { LOG_EVENT_TYPES, SHOW_TIMING_MATH } from '../../config/constants.js';
 import { checkForGoodbye } from '../../utils/call-utils.js';
 import { callEventEmitter } from '../sse.service.js';
 import { transcriptStorage } from '../transcript-storage.service.js';
+import { IVRNavigationService } from '../ivr-navigation.service.js';
+import { TwilioWsService } from '../twilio/ws.service.js';
 
 /**
  * Service for processing OpenAI events
@@ -13,6 +15,8 @@ export class OpenAIEventService {
     private readonly onEndCall: () => void;
     private readonly onSendAudioToTwilio: (payload: string) => void;
     private readonly onTruncateResponse: () => void;
+    private ivrNavigationService?: IVRNavigationService;
+    private twilioWsService?: TwilioWsService;
 
     /**
      * Create a new OpenAI event processor
@@ -31,6 +35,20 @@ export class OpenAIEventService {
         this.onEndCall = onEndCall;
         this.onSendAudioToTwilio = onSendAudioToTwilio;
         this.onTruncateResponse = onTruncateResponse;
+    }
+
+    /**
+     * Set the IVR navigation service
+     */
+    public setIVRNavigationService(service: IVRNavigationService): void {
+        this.ivrNavigationService = service;
+    }
+
+    /**
+     * Set the Twilio WebSocket service for DTMF
+     */
+    public setTwilioWsService(service: TwilioWsService): void {
+        this.twilioWsService = service;
     }
 
     /**
@@ -124,6 +142,25 @@ export class OpenAIEventService {
 
         // Store transcription in storage service
         transcriptStorage.addEntry(this.callState.callSid, 'assistant', transcript);
+
+        // Check for IVR navigation if service is available
+        if (this.ivrNavigationService && this.twilioWsService) {
+            const ivrRule = this.ivrNavigationService.processTranscript(this.callState, transcript);
+            
+            if (ivrRule) {
+                console.log(`[IVR] Detected menu option: "${transcript}" -> Action: ${ivrRule.action}`);
+                
+                // If AI says it will press a key, schedule DTMF after a delay
+                if (transcript.toLowerCase().includes('connect') || 
+                    transcript.toLowerCase().includes('press') ||
+                    transcript.toLowerCase().includes('transfer')) {
+                    
+                    setTimeout(() => {
+                        this.twilioWsService!.sendDTMF(ivrRule.action);
+                    }, ivrRule.delay || 1000);
+                }
+            }
+        }
 
         // Emit transcription event for AI speech
         callEventEmitter.emit('call:transcription', {

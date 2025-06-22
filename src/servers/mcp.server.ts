@@ -39,9 +39,14 @@ export class VoiceCallMcpServer {
             {
                 toNumber: z.string().describe('The phone number to call'),
                 callContext: z.string().describe('Context for the call'),
-                provider: z.enum(['openai', 'elevenlabs']).optional().describe('AI provider to use for the call (defaults to openai)')
+                provider: z.enum(['openai', 'elevenlabs']).optional().describe('AI provider to use for the call (defaults to openai)'),
+                ivrConfig: z.object({
+                    enabled: z.boolean().optional().describe('Enable IVR navigation (defaults to true)'),
+                    defaultAction: z.string().optional().describe('Default DTMF digit to press if no menu match found (defaults to "0")'),
+                    timeout: z.number().optional().describe('IVR navigation timeout in milliseconds (defaults to 30000)')
+                }).optional().describe('IVR navigation configuration')
             },
-            async ({ toNumber, callContext, provider }) => {
+            async ({ toNumber, callContext, provider, ivrConfig }) => {
                 try {
                     // Map string provider to enum
                     const aiProvider = provider === 'elevenlabs' ? AIProvider.ELEVENLABS : AIProvider.OPENAI;
@@ -319,7 +324,12 @@ export class VoiceCallMcpServer {
                 })).describe('List of targets to call'),
                 defaultPrompt: z.string().optional().describe('Default prompt to use if target has no specific prompt'),
                 defaultContext: z.string().optional().describe('Default context to use if target has no specific context'),
-                maxConcurrent: z.number().optional().describe('Maximum concurrent calls (default: 1)')
+                maxConcurrent: z.number().optional().describe('Maximum concurrent calls (default: 1)'),
+                ivrConfig: z.object({
+                    enabled: z.boolean().optional().describe('Enable IVR navigation (defaults to true)'),
+                    defaultAction: z.string().optional().describe('Default DTMF digit to press if no menu match found (defaults to "0")'),
+                    timeout: z.number().optional().describe('IVR navigation timeout in milliseconds (defaults to 30000)')
+                }).optional().describe('IVR navigation configuration')
             },
             async ({ provider, targets, defaultPrompt, defaultContext, maxConcurrent }) => {
                 try {

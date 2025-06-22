@@ -95,6 +95,26 @@ export class TwilioWsService {
     }
 
     /**
+     * Send DTMF tones to navigate IVR systems
+     * @param digits The DTMF digits to send (0-9, *, #)
+     */
+    public sendDTMF(digits: string): void {
+        if (!this.callState.streamSid) {
+            console.error('[DTMF] Cannot send DTMF - no streamSid available');
+            return;
+        }
+
+        const dtmfEvent = {
+            event: 'dtmf',
+            streamSid: this.callState.streamSid,
+            dtmf: { digits }
+        };
+
+        console.log(`[DTMF] Sending DTMF digits "${digits}" for call ${this.callState.callSid}`);
+        this.webSocket.send(JSON.stringify(dtmfEvent));
+    }
+
+    /**
      * Set up event handlers for the Twilio WebSocket
      * @param onMessage Callback for handling messages from Twilio
      * @param onClose Callback for when the connection is closed
