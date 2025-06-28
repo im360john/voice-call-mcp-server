@@ -5,7 +5,6 @@ import ExpressWs from 'express-ws';
 import { WebSocket } from 'ws';
 import cors from 'cors';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { CallType, AIProvider } from '../types.js';
 import { DYNAMIC_API_SECRET } from '../config/constants.js';
 import { CallSessionManager } from '../handlers/openai.handler.js';
@@ -49,9 +48,9 @@ export class VoiceServer {
         this.app.use(express.urlencoded({ extended: false }));
         
         // Serve static files from the public directory
-        const __filename = fileURLToPath(import.meta.url);
-        const __dirname = path.dirname(__filename);
-        this.app.use(express.static(path.join(__dirname, '../public')));
+        // Use process.cwd() to handle both ESM and CommonJS environments
+        const publicPath = path.join(process.cwd(), 'src', 'public');
+        this.app.use(express.static(publicPath));
     }
 
     private setupRoutes(): void {
@@ -520,9 +519,8 @@ export class VoiceServer {
     }
 
     private async handleSMSPreferencesPage(req: express.Request, res: express.Response): Promise<void> {
-        const __filename = fileURLToPath(import.meta.url);
-        const __dirname = path.dirname(__filename);
-        res.sendFile(path.join(__dirname, '../public/sms-preferences.html'));
+        const htmlPath = path.join(process.cwd(), 'src', 'public', 'sms-preferences.html');
+        res.sendFile(htmlPath);
     }
 
     private async handleSMSPreferences(req: express.Request, res: express.Response): Promise<void> {
