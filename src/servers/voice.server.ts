@@ -4,6 +4,8 @@ import VoiceResponse from 'twilio/lib/twiml/VoiceResponse.js';
 import ExpressWs from 'express-ws';
 import { WebSocket } from 'ws';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { CallType, AIProvider } from '../types.js';
 import { DYNAMIC_API_SECRET } from '../config/constants.js';
 import { CallSessionManager } from '../handlers/openai.handler.js';
@@ -16,6 +18,7 @@ import { smsStorage } from '../services/sms-storage.service.js';
 import { BatchOperationService } from '../services/batch-operation.service.js';
 import { transcriptStorage } from '../services/transcript-storage.service.js';
 import { BatchCallRequest, BatchSMSRequest } from '../types/batch.types.js';
+import { smsPreferences } from '../services/sms-preferences.service.js';
 dotenv.config();
 
 export class VoiceServer {
@@ -44,6 +47,11 @@ export class VoiceServer {
         }));
         this.app.use(express.json());
         this.app.use(express.urlencoded({ extended: false }));
+        
+        // Serve static files from the public directory
+        const __filename = fileURLToPath(import.meta.url);
+        const __dirname = path.dirname(__filename);
+        this.app.use(express.static(path.join(__dirname, '../public')));
     }
 
     private setupRoutes(): void {
@@ -66,6 +74,11 @@ export class VoiceServer {
             this.app.post('/sms/webhook', this.handleIncomingSMS.bind(this));
             this.app.post('/sms/send', this.handleSendSMS.bind(this));
             this.app.get('/sms/events', this.handleSMSSSE.bind(this));
+            
+            // SMS preferences routes
+            this.app.get('/sms-preferences', this.handleSMSPreferencesPage.bind(this));
+            this.app.post('/sms/preferences', this.handleSMSPreferences.bind(this));
+            this.app.get('/sms/preferences/:phoneNumber', this.handleGetSMSPreference.bind(this));
         }
 
         // Add MCP SSE endpoint if twilioCallService is provided
@@ -504,5 +517,93 @@ export class VoiceServer {
         }
 
         res.status(200).send('OK');
+    }
+
+    private async handleSMSPreferencesPage(req: express.Request, res: express.Response): Promise<void> {
+        const __filename = fileURLToPath(import.meta.url);
+        const __dirname = path.dirname(__filename);
+        res.sendFile(path.join(__dirname, '../public/sms-preferences.html'));
+    }
+
+    private async handleSMSPreferences(req: express.Request, res: express.Response): Promise<void> {
+        try {
+            const { phoneNumber, action } = req.body;
+
+            if (!phoneNumber || !action) {
+                res.status(400).json({ error: 'Phone number and action are required' });
+                return;
+            }
+
+            if (!['opt-in', 'opt-out'].includes(action)) {
+                res.status(400).json({ error: 'Invalid action. Must be "opt-in" or "opt-out"' });
+                return;
+            }
+
+            let preference;
+            if (action === 'opt-in') {
+                preference = smsPreferences.optIn(phoneNumber);
+                
+                // Send confirmation SMS if SMS service is available
+                if (this.twilioSMSService) {
+                    try {
+                        await this.twilioSMSService.sendSMS(
+                            phoneNumber,
+                            'You have successfully opted in to receive inventory notification SMS messages. Reply STOP at any time to opt out.',
+                            undefined,
+                            true // Skip opt-in check for confirmation message
+                        );
+                    } catch (smsError) {
+                        console.error('Failed to send opt-in confirmation SMS:', smsError);
+                    }
+                }
+            } else {
+                preference = smsPreferences.optOut(phoneNumber);
+                
+                // Send confirmation SMS if SMS service is available
+                if (this.twilioSMSService) {
+                    try {
+                        await this.twilioSMSService.sendSMS(
+                            phoneNumber,
+                            'You have successfully opted out of inventory notification SMS messages. You will no longer receive messages from us.',
+                            undefined,
+                            true // Skip opt-in check for confirmation message
+                        );
+                    } catch (smsError) {
+                        console.error('Failed to send opt-out confirmation SMS:', smsError);
+                    }
+                }
+            }
+
+            res.json({
+                success: true,
+                preference
+            });
+        } catch (error) {
+            console.error('Error handling SMS preferences:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    }
+
+    private async handleGetSMSPreference(req: express.Request, res: express.Response): Promise<void> {
+        try {
+            const { phoneNumber } = req.params;
+
+            if (!phoneNumber) {
+                res.status(400).json({ error: 'Phone number is required' });
+                return;
+            }
+
+            const preference = smsPreferences.getPreference(phoneNumber);
+            
+            if (!preference) {
+                res.status(404).json({ error: 'Preference not found' });
+                return;
+            }
+
+            res.json(preference);
+        } catch (error) {
+            console.error('Error getting SMS preference:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
     }
 }

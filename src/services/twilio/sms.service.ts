@@ -2,6 +2,7 @@ import twilio from 'twilio';
 import { callEventEmitter } from '../sse.service.js';
 import { BatchSMSRequest } from '../../types/batch.types.js';
 import { BatchOperationService } from '../batch-operation.service.js';
+import { smsPreferences } from '../sms-preferences.service.js';
 
 export interface SMSMessage {
     messageSid: string;
@@ -30,8 +31,26 @@ export class TwilioSMSService {
         }
     }
 
-    async sendSMS(to: string, body: string, batchId?: string): Promise<SMSMessage> {
+    async sendSMS(to: string, body: string, batchId?: string, skipOptInCheck: boolean = false): Promise<SMSMessage> {
         try {
+            // Check if the recipient has opted in (unless explicitly skipped for system messages)
+            if (!skipOptInCheck && !smsPreferences.isOptedIn(to)) {
+                const error = new Error('Recipient has not opted in to receive SMS messages');
+                callEventEmitter.emit('sms:error', { 
+                    error: error.message, 
+                    to, 
+                    body, 
+                    batchId,
+                    reason: 'not-opted-in' 
+                });
+                
+                if (batchId) {
+                    this.batchService.failBatchTarget(batchId, to, 'Recipient not opted in');
+                }
+                
+                throw error;
+            }
+
             const message = await this.twilioClient.messages.create({
                 body,
                 from: this.twilioNumber,
@@ -145,7 +164,7 @@ export class TwilioSMSService {
                     const promises = chunk.map(async (target) => {
                         try {
                             this.batchService.startBatchTarget(batchId, target.phoneNumber);
-                            await this.sendSMS(target.phoneNumber, target.message, batchId);
+                            await this.sendSMS(target.phoneNumber, target.message, batchId, false);
                         } catch (error) {
                             console.error(`Failed to send SMS to ${target.phoneNumber}:`, error);
                         }

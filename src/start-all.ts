@@ -49,6 +49,11 @@ function setupPort(): number {
  * @returns The public URL provided by ngrok
  */
 async function setupNgrokTunnel(portNumber: number): Promise<string> {
+    // Parse comma-separated domains from environment variable
+    const domains = process.env.NGROK_DOMAIN 
+        ? process.env.NGROK_DOMAIN.split(',').map(d => d.trim()).filter(d => d)
+        : [];
+
     const ngrokConfig: any = {
         addr: portNumber,
         authtoken_from_env: true,
@@ -56,47 +61,85 @@ async function setupNgrokTunnel(portNumber: number): Promise<string> {
         pooling_enabled: true
     };
 
-    // Use domain if provided in environment variables
-    if (process.env.NGROK_DOMAIN) {
-        ngrokConfig.domain = process.env.NGROK_DOMAIN;
-    }
+    // Try each domain in order until one succeeds
+    const errors: Array<{ domain: string; error: any }> = [];
 
-    try {
-        const listener = await ngrok.forward(ngrokConfig);
+    for (const domain of domains) {
+        console.log(`Attempting to establish ngrok tunnel with domain: ${domain}`);
+        ngrokConfig.domain = domain;
 
-        const twilioCallbackUrl = listener.url();
-        if (!twilioCallbackUrl) {
-            throw new Error('Failed to obtain ngrok URL');
-        }
+        try {
+            const listener = await ngrok.forward(ngrokConfig);
 
-        return twilioCallbackUrl;
-    } catch (error: any) {
-        // If the endpoint is already online, try to disconnect and reconnect
-        if (error.errorCode === 'ERR_NGROK_334') {
-            console.log('Ngrok endpoint already online. Attempting to disconnect and reconnect...');
-            
-            try {
-                // Try to disconnect existing connections
-                await ngrok.disconnect();
-                await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+            const twilioCallbackUrl = listener.url();
+            if (!twilioCallbackUrl) {
+                throw new Error('Failed to obtain ngrok URL');
+            }
+
+            console.log(`Successfully established ngrok tunnel at: ${twilioCallbackUrl}`);
+            return twilioCallbackUrl;
+        } catch (error: any) {
+            // If the endpoint is already online, try to disconnect and reconnect
+            if (error.errorCode === 'ERR_NGROK_334') {
+                console.log(`Ngrok endpoint ${domain} already online. Attempting to disconnect and reconnect...`);
                 
-                // Try again
-                const listener = await ngrok.forward(ngrokConfig);
-                const twilioCallbackUrl = listener.url();
-                
-                if (!twilioCallbackUrl) {
-                    throw new Error('Failed to obtain ngrok URL after retry');
+                try {
+                    // Try to disconnect existing connections
+                    await ngrok.disconnect();
+                    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+                    
+                    // Try again
+                    const listener = await ngrok.forward(ngrokConfig);
+                    const twilioCallbackUrl = listener.url();
+                    
+                    if (!twilioCallbackUrl) {
+                        throw new Error('Failed to obtain ngrok URL after retry');
+                    }
+                    
+                    console.log(`Successfully established ngrok tunnel at: ${twilioCallbackUrl} (after retry)`);
+                    return twilioCallbackUrl;
+                } catch (retryError) {
+                    console.error(`Failed to reconnect ${domain} after disconnect:`, retryError);
+                    errors.push({ domain, error: retryError });
                 }
-                
-                return twilioCallbackUrl;
-            } catch (retryError) {
-                console.error('Failed to reconnect after disconnect:', retryError);
-                throw new Error('Ngrok endpoint is already in use. Please check https://dashboard.ngrok.com/endpoints/status and stop the existing endpoint.');
+            } else {
+                console.error(`Failed to establish tunnel with domain ${domain}:`, error.message || error);
+                errors.push({ domain, error });
             }
         }
-        
-        throw error;
     }
+
+    // If no domains were provided or all failed, try without a specific domain
+    if (domains.length === 0 || errors.length === domains.length) {
+        console.log('Attempting to establish ngrok tunnel without specific domain...');
+        delete ngrokConfig.domain;
+
+        try {
+            const listener = await ngrok.forward(ngrokConfig);
+
+            const twilioCallbackUrl = listener.url();
+            if (!twilioCallbackUrl) {
+                throw new Error('Failed to obtain ngrok URL');
+            }
+
+            console.log(`Successfully established ngrok tunnel at: ${twilioCallbackUrl} (random domain)`);
+            return twilioCallbackUrl;
+        } catch (error: any) {
+            console.error('Failed to establish ngrok tunnel without domain:', error);
+            
+            // Provide comprehensive error message
+            if (errors.length > 0) {
+                console.error('\nDomain-specific errors:');
+                errors.forEach(({ domain, error }) => {
+                    console.error(`  - ${domain}: ${error.message || error}`);
+                });
+            }
+            
+            throw new Error('Failed to establish ngrok tunnel with any of the provided domains or with a random domain. Please check https://dashboard.ngrok.com/endpoints/status');
+        }
+    }
+
+    throw new Error('Failed to establish ngrok tunnel');
 }
 
 /**
