@@ -310,6 +310,210 @@ export class VoiceCallMcpServer {
             }
         );
 
+        this.server.tool(
+            'get-sms-by-phone',
+            'Retrieve SMS conversation by phone number',
+            {
+                phoneNumber: z.string().describe('The phone number to look up SMS conversation for')
+            },
+            async ({ phoneNumber }) => {
+                try {
+                    const conversation = smsStorage.getConversationByPhone(phoneNumber);
+                    
+                    if (!conversation) {
+                        return {
+                            content: [{
+                                type: 'text',
+                                text: JSON.stringify({
+                                    status: 'error',
+                                    message: 'No conversation found for this phone number'
+                                })
+                            }],
+                            isError: true
+                        };
+                    }
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'success',
+                                conversation: conversation
+                            })
+                        }]
+                    };
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'error',
+                                message: `Failed to retrieve conversation: ${errorMessage}`
+                            })
+                        }],
+                        isError: true
+                    };
+                }
+            }
+        );
+
+        this.server.tool(
+            'get-received-sms',
+            'Get only received (inbound) SMS messages from a phone number',
+            {
+                phoneNumber: z.string().describe('The phone number to get received messages from'),
+                limit: z.number().optional().describe('Maximum number of messages to return (default: all)')
+            },
+            async ({ phoneNumber, limit }) => {
+                try {
+                    const conversation = smsStorage.getConversationByPhone(phoneNumber);
+                    
+                    if (!conversation) {
+                        return {
+                            content: [{
+                                type: 'text',
+                                text: JSON.stringify({
+                                    status: 'success',
+                                    messages: [],
+                                    count: 0,
+                                    phoneNumber: phoneNumber
+                                })
+                            }]
+                        };
+                    }
+                    
+                    // Filter only inbound messages
+                    const inboundMessages = conversation.messages.filter(msg => msg.direction === 'inbound');
+                    const messages = limit ? inboundMessages.slice(-limit) : inboundMessages;
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'success',
+                                messages: messages,
+                                count: messages.length,
+                                totalInbound: inboundMessages.length,
+                                phoneNumber: phoneNumber,
+                                conversationId: conversation.id
+                            })
+                        }]
+                    };
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'error',
+                                message: `Failed to retrieve messages: ${errorMessage}`
+                            })
+                        }],
+                        isError: true
+                    };
+                }
+            }
+        );
+
+        this.server.tool(
+            'get-sms-conversation-summary',
+            'Get a summary of an SMS conversation by phone number',
+            {
+                phoneNumber: z.string().describe('The phone number to get conversation summary for')
+            },
+            async ({ phoneNumber }) => {
+                try {
+                    const conversation = smsStorage.getConversationByPhone(phoneNumber);
+                    
+                    if (!conversation) {
+                        return {
+                            content: [{
+                                type: 'text',
+                                text: JSON.stringify({
+                                    status: 'error',
+                                    message: 'No conversation found for this phone number'
+                                })
+                            }],
+                            isError: true
+                        };
+                    }
+                    
+                    const summary = smsStorage.getConversationSummary(conversation.id);
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: summary
+                        }]
+                    };
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'error',
+                                message: `Failed to generate summary: ${errorMessage}`
+                            })
+                        }],
+                        isError: true
+                    };
+                }
+            }
+        );
+
+        this.server.tool(
+            'monitor-sms-realtime',
+            'Get SSE URL to monitor SMS messages in real-time',
+            {
+                phoneNumber: z.string().optional().describe('Optional: Phone number to monitor specific conversation')
+            },
+            async ({ phoneNumber }) => {
+                try {
+                    let sseUrl = `${this.twilioCallbackUrl}/sms/events`;
+                    let conversationId = null;
+                    
+                    if (phoneNumber) {
+                        const conversation = smsStorage.getConversationByPhone(phoneNumber);
+                        if (conversation) {
+                            conversationId = conversation.id;
+                            sseUrl += `?conversationId=${conversationId}`;
+                        }
+                    }
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'success',
+                                sseUrl: sseUrl,
+                                conversationId: conversationId,
+                                phoneNumber: phoneNumber,
+                                info: 'Connect to the SSE URL to receive real-time SMS updates. Events include: sms:received, sms:sent, sms:error'
+                            })
+                        }]
+                    };
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify({
+                                status: 'error',
+                                message: `Failed to get monitoring URL: ${errorMessage}`
+                            })
+                        }],
+                        isError: true
+                    };
+                }
+            }
+        );
+
         // Batch call tool
         this.server.tool(
             'trigger-batch-calls',
